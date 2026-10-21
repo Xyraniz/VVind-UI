@@ -2329,11 +2329,30 @@ function NullUI:CreateWindow(opts)
  
 	local root = NullUI._Root
 	local jan = Janitor.new()
+	local windowPosition = UDim2.fromScale(0.5, IsMobileDevice and 0.5 or 0.55)
+	-- Keep the shadow outside main because main clips its children.
+	local shadow = Instance.new("ImageLabel")
+	shadow.Name = "WindowShadow"
+	shadow.BackgroundTransparency = 1
+	shadow.BorderSizePixel = 0
+	shadow.Image = "rbxassetid://112971167999062"
+	shadow.ImageColor3 = Color3.new(0, 0, 0)
+	shadow.ImageTransparency = 0
+	shadow.ScaleType = Enum.ScaleType.Slice
+	shadow.SliceCenter = Rect.new(Vector2.new(112, 112), Vector2.new(147, 147))
+	shadow.SliceScale = 0.75
+	shadow.AnchorPoint = Vector2.new(0.5, 0.5)
+	shadow.Position = windowPosition
+	shadow.Size = UDim2.new(size.X.Scale, size.X.Offset + 75, size.Y.Scale, size.Y.Offset + 75)
+	shadow.ZIndex = Z.Window - 1
+	shadow.Parent = root
+	Corner(shadow, 5)
+	jan:Add(shadow)
  
 	local main = Instance.new("Frame")
 	main.Name = "Window"
 	main.AnchorPoint = Vector2.new(0.5, 0.5)
-	main.Position = UDim2.fromScale(0.5, IsMobileDevice and 0.5 or 0.55)
+	main.Position = windowPosition
 	main.Size = size
 	main.BackgroundColor3 = NullUI.Theme.Background
 	main.BackgroundTransparency = 1
@@ -2344,6 +2363,21 @@ function NullUI:CreateWindow(opts)
 	Corner(main, NullUI.Theme.CornerRadius)
 	Stroke(main, Color3.new(1, 1, 1), 1, 0.92)
 	GlassLayer(main, NullUI.Theme.CornerRadius, 0.985)
+
+	local function syncShadow()
+		shadow.AnchorPoint = main.AnchorPoint
+		shadow.Position = main.Position
+		shadow.Size = UDim2.new(
+			main.Size.X.Scale, main.Size.X.Offset + 75,
+			main.Size.Y.Scale, main.Size.Y.Offset + 75
+		)
+		shadow.Visible = main.Visible
+	end
+	syncShadow()
+	jan:Add(main:GetPropertyChangedSignal("Position"):Connect(syncShadow))
+	jan:Add(main:GetPropertyChangedSignal("Size"):Connect(syncShadow))
+	jan:Add(main:GetPropertyChangedSignal("AnchorPoint"):Connect(syncShadow))
+	jan:Add(main:GetPropertyChangedSignal("Visible"):Connect(syncShadow))
  
 	local topbar = Instance.new("Frame")
 	topbar.Name = "TopBar"
@@ -2543,6 +2577,7 @@ function NullUI:CreateWindow(opts)
  
 	local self = setmetatable({
 		_gui            = main,
+		_shadow         = shadow,
 		_content        = content,
 		_tabBar         = tabBar,
 		_tabIndicatorLayer = tabIndicatorLayer,
@@ -2737,6 +2772,9 @@ function Window:Destroy()
 		Size = UDim2.new(gui.Size.X.Scale, gui.Size.X.Offset, 0, 0),
 	}, 0.34, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 	Tween(gui, { BackgroundTransparency = 1 }, 0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+	if self._shadow then
+		Tween(self._shadow, { ImageTransparency = 1 }, 0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+	end
  
 	task.delay(0.34, function()
 		self._janitor:Destroy()
@@ -2769,6 +2807,9 @@ function Window:Close()
 		Size = UDim2.new(gui.Size.X.Scale, gui.Size.X.Offset, 0, 0),
 	}, 0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
 	Tween(gui, { BackgroundTransparency = 1 }, 0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+	if self._shadow then
+		Tween(self._shadow, { ImageTransparency = 1 }, 0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+	end
  
 	task.delay(0.28, function()
 		if self._destroyed then return end
@@ -2787,6 +2828,11 @@ function Window:Open()
  
 	local gui = self._gui
 	gui.Visible = true
+	if self._shadow then
+		self._shadow.Visible = true
+		self._shadow.ImageTransparency = 1
+		Tween(self._shadow, { ImageTransparency = 0 }, 0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+	end
  
 	local targetSize = self._sizeBeforeMinimize or self._normalSize
 	Tween(gui, {
