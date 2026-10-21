@@ -8556,23 +8556,30 @@ local function ValidateConfigFlag(api, value)
 			end
 			local key, keyErr = ResolveKeybindKey(keyValue)
 			if keyErr then return false, nil, keyErr end
-			local mode = value.mode or value.Mode or api.Mode or "Press"
-			if mode ~= "Press" and mode ~= "Toggle" and mode ~= "Hold" and mode ~= "Always" then
-				return false, nil, "mode must be Press, Toggle, Hold, or Always"
+			local mode = value.mode or value.Mode or api.Mode or "Toggle"
+			local legacyPress = mode == "Press"
+			if legacyPress then mode = "Toggle" end
+			if mode ~= "Toggle" and mode ~= "Hold" and mode ~= "Always" then
+				return false, nil, "mode must be Toggle, Hold, or Always"
 			end
-			local active = value.active
-			if active == nil then active = value.Active end
-			if active == nil and type(api.GetActive) == "function" then
-				local ok, current = pcall(api.GetActive, api)
-				if ok then active = current end
+			local active
+			if legacyPress then
+				active = false
+			else
+				active = value.active
+				if active == nil then active = value.Active end
+				if active == nil and type(api.GetActive) == "function" then
+					local ok, current = pcall(api.GetActive, api)
+					if ok then active = current end
+				end
+				if active ~= nil and type(active) ~= "boolean" then return false, nil, "active must be a boolean" end
 			end
-			if active ~= nil and type(active) ~= "boolean" then return false, nil, "active must be a boolean" end
 			local context = value.context or value.Context or api.Context or "global"
 			if type(context) ~= "string" or context:gsub("%s", "") == "" then
 				return false, nil, "context must be a non-empty string"
 			end
 			if mode == "Always" then active = true end
-			if mode == "Hold" or mode == "Press" then active = false end
+			if mode == "Hold" then active = false end
 			return true, { key = key or "NONE", mode = mode, context = context, active = active == true }
 		end
 		local key, keyErr = ResolveKeybindKey(value)
@@ -12031,10 +12038,10 @@ end
  
 function Tab:AddKeybind(opts)
 	opts = opts or {}
-	local modeOrder = { "Press", "Toggle", "Hold", "Always" }
-	local modeNames = { Press = "PRS", Toggle = "TGL", Hold = "HLD", Always = "ALW" }
-	local mode = opts.Mode or (opts.ToggleFlag and "Toggle" or "Press")
-	assert(table.find(modeOrder, mode), "Keybind Mode must be Press, Toggle, Hold, or Always")
+	local modeOrder = { "Toggle", "Hold", "Always" }
+	local modeNames = { Toggle = "TGL", Hold = "HLD", Always = "ALW" }
+	local mode = opts.Mode or "Toggle"
+	assert(table.find(modeOrder, mode), "Keybind Mode must be Toggle, Hold, or Always")
 	local currentKey, keyErr = ResolveKeybindKey(opts.Default)
 	assert(not keyErr, "Keybind Default " .. tostring(keyErr))
 	local context = opts.Context or "global"
@@ -12149,18 +12156,16 @@ function Tab:AddKeybind(opts)
 	end
 
 	local function getActive()
+		if opts.ToggleFlag then
+			local toggle = VVindUI.Flags[opts.ToggleFlag]
+			if toggle and toggle.Kind == "Toggle" then
+				local ok, value = pcall(toggle.Get, toggle)
+				if ok then return value == true end
+			end
+		end
 		if mode == "Always" then return true end
 		if mode == "Hold" then return holdActive end
-		if mode == "Toggle" then
-			if opts.ToggleFlag then
-				local toggle = VVindUI.Flags[opts.ToggleFlag]
-				if toggle and toggle.Kind == "Toggle" then
-					local ok, value = pcall(toggle.Get, toggle)
-					if ok then return value == true end
-				end
-			end
-			return toggleActive
-		end
+		if mode == "Toggle" then return toggleActive end
 		return false
 	end
 
@@ -12208,10 +12213,15 @@ function Tab:AddKeybind(opts)
 	control.releaseHold = releaseHold
 
 	local function applyMode(nextMode, silent, source)
-		assert(table.find(modeOrder, nextMode), "Keybind Mode must be Press, Toggle, Hold, or Always")
+		assert(table.find(modeOrder, nextMode), "Keybind Mode must be Toggle, Hold, or Always")
 		if mode == nextMode then return false end
 		local previous = mode
-		if previous == "Hold" then releaseHold(silent) end
+		if previous == "Hold" then
+			releaseHold(silent)
+		elseif previous == "Toggle" and nextMode == "Hold" then
+			toggleActive = false
+			if opts.ToggleFlag then setToggleFlag(false, silent) end
+		end
 		mode = nextMode
 		control.mode = mode
 		if api then api.Mode = mode end
@@ -12275,8 +12285,6 @@ function Tab:AddKeybind(opts)
 			if opts.ToggleFlag then setToggleFlag(active) else toggleActive = active end
 			firePress("press", active)
 			fireStateChanged("active")
-		elseif mode == "Press" then
-			firePress("press", nil)
 		end
 	end
 	control.pressKey = pressKey
@@ -12423,11 +12431,15 @@ function Tab:AddKeybind(opts)
 						nextKey = key
 					end
 					nextMode = value.mode or value.Mode
+					if nextMode == "Press" then
+						nextMode, nextActive, activeSpecified = "Toggle", false, true
+					else
+						nextActive = value.active
+						if nextActive == nil then nextActive = value.Active end
+						activeSpecified = nextActive ~= nil
+					end
 					nextContext = value.context or value.Context
-					nextActive = value.active
-					if nextActive == nil then nextActive = value.Active end
-					activeSpecified = nextActive ~= nil
-					if nextMode ~= nil then assert(table.find(modeOrder, nextMode), "Keybind Mode must be Press, Toggle, Hold, or Always") end
+					if nextMode ~= nil then assert(table.find(modeOrder, nextMode), "Keybind Mode must be Toggle, Hold, or Always") end
 					if nextContext ~= nil then assert(type(nextContext) == "string" and nextContext:gsub("%s", "") ~= "", "Keybind Context must be a non-empty string") end
 					if activeSpecified then assert(type(nextActive) == "boolean", "Keybind active state must be a boolean") end
 				else
