@@ -936,6 +936,7 @@ end
 ```
 
 `CloudService` is a client integration, not a ready-made server. Your backend must implement the routes expected by the library.
+Requests include the `X-VVindUI-Identity` and `X-VVindUI-Script` headers. Deletes also include `X-VVindUI-Owner-Token`.
 
 ## AI assistant
 

@@ -13,14 +13,14 @@ local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui")
  
 local IsMobileDevice = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
  
-local NullUI = {}
-NullUI.__index = NullUI
-NullUI.Version = "2.8.1"
-NullUI.Flags = {}
-NullUI.ConfigFlags = {}
-NullUI.ConfigValidators = {}
-NullUI.FlagMigrations = {}
-NullUI._Windows = {}
+local VVindUI = {}
+VVindUI.__index = VVindUI
+VVindUI.Version = "2.8.1"
+VVindUI.Flags = {}
+VVindUI.ConfigFlags = {}
+VVindUI.ConfigValidators = {}
+VVindUI.FlagMigrations = {}
+VVindUI._Windows = {}
  
 local function GetGlobalTable()
 	local ok, g = pcall(function()
@@ -32,7 +32,8 @@ end
  
 do
 	local globalTable = GetGlobalTable()
-	local previousUnload = globalTable.__NullUI_Unload
+	local previousUnload = globalTable.__VVindUI_Unload or globalTable.__NullUI_Unload
+	globalTable.__VVindUI_Unload = nil
 	globalTable.__NullUI_Unload = nil
 	if type(previousUnload) == "function" then
 		pcall(previousUnload)
@@ -84,8 +85,8 @@ local LocalizedEntries = setmetatable({}, { __mode = "k" })
 local LocaleListeners = {}
 local KnownLocaleKeys = {}
 
-NullUI.Language = "en"
-NullUI.Locales = {
+VVindUI.Language = "en"
+VVindUI.Locales = {
 	en = {},
 	es = {
 		["Search"] = "Buscar",
@@ -126,7 +127,7 @@ local function IsValidTranslation(value)
 	return true
 end
 
-function NullUI:Translate(text, variables)
+function VVindUI:Translate(text, variables)
 	if type(text) ~= "string" then return text end
 	KnownLocaleKeys[text] = true
 	local activeLocale = self.Locales[self.Language]
@@ -148,7 +149,7 @@ function NullUI:Translate(text, variables)
 	return translated
 end
 
-function NullUI:_TrackLocalizedText(instance, property, key)
+function VVindUI:_TrackLocalizedText(instance, property, key)
 	if type(key) ~= "string" or key == "" then return end
 	local properties = LocalizedEntries[instance]
 	if not properties then
@@ -160,7 +161,7 @@ function NullUI:_TrackLocalizedText(instance, property, key)
 	if translated ~= key then pcall(function() instance[property] = translated end) end
 end
 
-function NullUI:Localize(instance, key, property)
+function VVindUI:Localize(instance, key, property)
 	assert(instance and type(key) == "string", "Localize expects an instance and a string key")
 	property = property or "Text"
 	self:_TrackLocalizedText(instance, property, key)
@@ -168,11 +169,11 @@ function NullUI:Localize(instance, key, property)
 	return ok and value or nil
 end
 
-function NullUI:GetLanguage()
+function VVindUI:GetLanguage()
 	return self.Language
 end
 
-function NullUI:SetLanguage(language)
+function VVindUI:SetLanguage(language)
 	assert(type(language) == "string" and language:match("^[%a][%w_-]*$"), "language must be a locale code")
 	language = string.lower(language)
 	if not self.Locales[language] then return false, "Locale '" .. language .. "' is not registered" end
@@ -202,7 +203,7 @@ function NullUI:SetLanguage(language)
 	return true
 end
 
-function NullUI:RegisterLocale(language, translations)
+function VVindUI:RegisterLocale(language, translations)
 	assert(type(language) == "string" and language:match("^[%a][%w_-]*$"), "language must be a locale code")
 	assert(type(translations) == "table", "translations must be a table")
 	language = string.lower(language)
@@ -216,7 +217,7 @@ function NullUI:RegisterLocale(language, translations)
 	return true
 end
 
-function NullUI:ValidateLocale(language, referenceLanguage)
+function VVindUI:ValidateLocale(language, referenceLanguage)
 	assert(type(language) == "string", "language must be a locale code")
 	language = string.lower(language)
 	referenceLanguage = string.lower(referenceLanguage or "en")
@@ -241,7 +242,7 @@ function NullUI:ValidateLocale(language, referenceLanguage)
 	return #report.Missing == 0 and #report.Invalid == 0, report
 end
 
-function NullUI:RegisterLocaleCallback(callback)
+function VVindUI:RegisterLocaleCallback(callback)
 	assert(type(callback) == "function", "locale callback must be a function")
 	local listener = { Callback = callback, Connected = true }
 	table.insert(LocaleListeners, listener)
@@ -255,20 +256,20 @@ function NullUI:RegisterLocaleCallback(callback)
 	return listener
 end
 
-NullUI.translate = NullUI.Translate
-NullUI.localize = NullUI.Localize
-NullUI.set_language = NullUI.SetLanguage
-NullUI.register_locale = NullUI.RegisterLocale
-NullUI.validate_locale = NullUI.ValidateLocale
-NullUI.register_locale_callback = NullUI.RegisterLocaleCallback
+VVindUI.translate = VVindUI.Translate
+VVindUI.localize = VVindUI.Localize
+VVindUI.set_language = VVindUI.SetLanguage
+VVindUI.register_locale = VVindUI.RegisterLocale
+VVindUI.validate_locale = VVindUI.ValidateLocale
+VVindUI.register_locale_callback = VVindUI.RegisterLocaleCallback
 
 local function TrackLocalizedInstance(instance)
 	if not instance:IsA("TextLabel") and not instance:IsA("TextButton") and not instance:IsA("TextBox") then return end
 	local ok, text = pcall(function() return instance.Text end)
-	if ok and text ~= "" then NullUI:_TrackLocalizedText(instance, "Text", text) end
+	if ok and text ~= "" then VVindUI:_TrackLocalizedText(instance, "Text", text) end
 	if instance:IsA("TextBox") then
 		local placeholderOk, placeholder = pcall(function() return instance.PlaceholderText end)
-		if placeholderOk and placeholder ~= "" then NullUI:_TrackLocalizedText(instance, "PlaceholderText", placeholder) end
+		if placeholderOk and placeholder ~= "" then VVindUI:_TrackLocalizedText(instance, "PlaceholderText", placeholder) end
 	end
 end
 
@@ -332,7 +333,7 @@ local function FormatNumber(v)
 	return string.format("%.4g", v)
 end
  
-local ACRYLIC_DOF_NAME = "NullUI_AcrylicDOF"
+local ACRYLIC_DOF_NAME = "VVindUI_AcrylicDOF"
 local ACRYLIC_DISTANCE = 0.001
 local ACRYLIC_TRANSPARENCY = 0.98
 local AcrylicDOF = nil
@@ -340,7 +341,7 @@ local AcrylicControllers = {}
 local CameraConnections = {}
 local AcrylicShuttingDown = false
  
-NullUI.Config = { Blur = true, MaxNotifications = 5 }
+VVindUI.Config = { Blur = true, MaxNotifications = 5 }
  
 local function DisconnectCameraSignals()
 	for i = #CameraConnections, 1, -1 do
@@ -353,6 +354,8 @@ local function EnsureAcrylicDOF()
 	if AcrylicDOF and AcrylicDOF.Parent then return AcrylicDOF end
 	local stale = Lighting:FindFirstChild(ACRYLIC_DOF_NAME)
 	if stale then stale:Destroy() end
+	local previousDof = Lighting:FindFirstChild("NullUI_AcrylicDOF")
+	if previousDof then previousDof:Destroy() end
  
 	local dof = Instance.new("DepthOfFieldEffect")
 	dof.Name = ACRYLIC_DOF_NAME
@@ -370,7 +373,7 @@ end
 local function RefreshAcrylicEffect()
 	if AcrylicShuttingDown then return end
 	local dof = EnsureAcrylicDOF()
-	dof.Enabled = NullUI.Config.Blur ~= false and #AcrylicControllers > 0
+	dof.Enabled = VVindUI.Config.Blur ~= false and #AcrylicControllers > 0
 end
  
 local function UpdateAllAcrylic()
@@ -400,7 +403,7 @@ end
  
 local function CreateWindowAcrylic(guiObject)
 	local folder = Instance.new("Folder")
-	folder.Name = "NullUI_AcrylicWindow"
+	folder.Name = "VVindUI_AcrylicWindow"
  
 	local part = Instance.new("Part")
 	part.Name = "Glass"
@@ -447,7 +450,7 @@ local function CreateWindowAcrylic(guiObject)
 		end
  
 		local size = gui.AbsoluteSize
-		local visible = NullUI.Config.Blur ~= false
+		local visible = VVindUI.Config.Blur ~= false
 			and gui.Visible and size.X > 2 and size.Y > 2
 		self.Part.Transparency = visible and ACRYLIC_TRANSPARENCY or 1
 		if not visible then return end
@@ -517,8 +520,8 @@ LibJanitor:Add(function()
 	DisconnectCameraSignals()
 end)
  
-function NullUI:SetBlurEnabled(enabled)
-	NullUI.Config.Blur = enabled and true or false
+function VVindUI:SetBlurEnabled(enabled)
+	VVindUI.Config.Blur = enabled and true or false
 	RefreshAcrylicEffect()
 	UpdateAllAcrylic()
 end
@@ -531,12 +534,10 @@ local function DestroyAllAcrylicControllers()
 end
  
 local STORAGE_FOLDER = "Vvind-UI"
-local LEGACY_STORAGE_FOLDER = "NullUI"
 local ASSETS_FOLDER = STORAGE_FOLDER .. "/Assets"
-local LEGACY_ASSETS_FOLDER = LEGACY_STORAGE_FOLDER .. "/Assets"
-NullUI.directory = STORAGE_FOLDER
-NullUI.settings_folder = "Randoms"
-NullUI.settings_directory = STORAGE_FOLDER .. "/Settings/Randoms"
+VVindUI.directory = STORAGE_FOLDER
+VVindUI.settings_folder = "Randoms"
+VVindUI.settings_directory = STORAGE_FOLDER .. "/Settings/Randoms"
  
 local function hasFn(name)
 	local ok, fn = pcall(function()
@@ -580,18 +581,10 @@ local function PrivateTabFlagPath(name)
 	return STORAGE_FOLDER .. "/PrivateTab_" .. safe .. ".remember"
 end
 
-local function LegacyPrivateTabFlagPath(name)
-	local safe = tostring(name or ""):gsub("[^%w_%-]", "_")
-	return LEGACY_STORAGE_FOLDER .. "/PrivateTab_" .. safe .. ".remember"
-end
- 
 local function IsPrivateTabRemembered(name)
 	if not fn_isfile then return false end
-	for _, path in ipairs({ PrivateTabFlagPath(name), LegacyPrivateTabFlagPath(name) }) do
-		local ok, exists = pcall(fn_isfile, path)
-		if ok and exists == true then return true end
-	end
-	return false
+	local ok, exists = pcall(fn_isfile, PrivateTabFlagPath(name))
+	return ok and exists == true
 end
  
 local function SetPrivateTabRemembered(name, remember)
@@ -608,18 +601,15 @@ local function SetPrivateTabRemembered(name, remember)
 end
  
 local RunCountPath = STORAGE_FOLDER .. "/RunCount.txt"
-local LegacyRunCountPath = LEGACY_STORAGE_FOLDER .. "/RunCount.txt"
  
 local function BumpRunCount()
 	local count = 1
 	if fn_isfile and fn_readfile then
-		for _, path in ipairs({ RunCountPath, LegacyRunCountPath }) do
-			local existsOk, exists = pcall(fn_isfile, path)
-			if existsOk and exists then
-				local ok, data = pcall(fn_readfile, path)
-				local n = ok and tonumber(data)
-				if n then count = math.floor(n) + 1; break end
-			end
+		local existsOk, exists = pcall(fn_isfile, RunCountPath)
+		if existsOk and exists then
+			local ok, data = pcall(fn_readfile, RunCountPath)
+			local n = ok and tonumber(data)
+			if n then count = math.floor(n) + 1 end
 		end
 	end
 	if fn_writefile then
@@ -748,7 +738,7 @@ end
  
 local Fonts = LoadFonts()
  
-NullUI.Theme = {
+VVindUI.Theme = {
 	Background     = Color3.fromRGB(16, 16, 16),
 	Surface        = Color3.fromRGB(24, 24, 24),
 	Text           = Color3.fromRGB(240, 240, 240),
@@ -796,7 +786,7 @@ end
  
 local function Corner(parent, radius)
 	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(0, radius or NullUI.Theme.CornerRadius)
+	c.CornerRadius = UDim.new(0, radius or VVindUI.Theme.CornerRadius)
 	c.Parent = parent
 	return c
 end
@@ -834,7 +824,7 @@ end
 local function AddContentScrollThumb(scroll, listLayout, thumbParent, janitor)
 	local thumb = Instance.new("Frame")
 	thumb.Name = "ContentScrollThumb"
-	thumb.BackgroundColor3 = NullUI.Theme.TextDim
+	thumb.BackgroundColor3 = VVindUI.Theme.TextDim
 	thumb.BackgroundTransparency = 0.35
 	thumb.BorderSizePixel = 0
 	thumb.AnchorPoint = Vector2.new(1, 0)
@@ -893,7 +883,7 @@ local function MeasureText(text, size, maxWidth)
  
 	local ok, bounds = pcall(function()
 		return TextService:GetTextSize(
-			text, size, NullUI.Theme.MeasureFont,
+			text, size, VVindUI.Theme.MeasureFont,
 			Vector2.new(maxWidth, 100000)
 		)
 	end)
@@ -954,7 +944,7 @@ local function LoadIconSource(source)
 	return nil
 end
  
-function NullUI:GetIcon(name, source)
+function VVindUI:GetIcon(name, source)
 	source = source or "Lucide"
 	local set = LoadIconSource(source)
 	local iconId = set and set[name]
@@ -969,12 +959,12 @@ local function ResolveIcon(icon)
 	if icon:match("^%d+$") then return "rbxassetid://" .. icon end
 	local source, name = icon:match("^(%a[%w%-]*):(.+)$")
 	if source and name then
-		return NullUI:GetIcon(name, source)
+		return VVindUI:GetIcon(name, source)
 	end
-	return NullUI:GetIcon(icon, "Lucide")
+	return VVindUI:GetIcon(icon, "Lucide")
 end
  
-function NullUI:PreloadIcons(sources)
+function VVindUI:PreloadIcons(sources)
 	for _, src in ipairs(sources or { "Lucide" }) do
 		task.spawn(LoadIconSource, src)
 	end
@@ -988,11 +978,13 @@ local function GetRoot()
 		if ok and container then parent = container end
 	end
  
-	local stale = parent:FindFirstChild("NullUI")
+	local stale = parent:FindFirstChild("VVindUI")
 	if stale then stale:Destroy() end
+	local previousRoot = parent:FindFirstChild("NullUI")
+	if previousRoot then previousRoot:Destroy() end
  
 	local screenGui = Instance.new("ScreenGui")
-	screenGui.Name = "NullUI"
+	screenGui.Name = "VVindUI"
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = false
 	screenGui.DisplayOrder = 9999
@@ -1002,10 +994,10 @@ local function GetRoot()
 	return screenGui
 end
  
-NullUI._Root = GetRoot()
+VVindUI._Root = GetRoot()
  
 local function ViewportSize()
-	local root = NullUI._Root
+	local root = VVindUI._Root
 	if root and root.AbsoluteSize.X > 0 then
 		return root.AbsoluteSize
 	end
@@ -1024,7 +1016,7 @@ end
 local GlobalScale = Instance.new("UIScale")
 GlobalScale.Name = "GlobalScale"
 GlobalScale.Scale = ComputeUIScale()
-GlobalScale.Parent = NullUI._Root
+GlobalScale.Parent = VVindUI._Root
  
 local function GetUIScale()
 	return GlobalScale.Scale
@@ -1045,7 +1037,7 @@ LibJanitor:Add(workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(funct
 	RefreshUIScale()
 end))
  
-function NullUI:SetScaleRange(minScale, maxScale)
+function VVindUI:SetScaleRange(minScale, maxScale)
 	UI_SCALE_MIN = minScale or UI_SCALE_MIN
 	UI_SCALE_MAX = maxScale or UI_SCALE_MAX
 	RefreshUIScale()
@@ -1085,7 +1077,7 @@ local function MakePopupBackdrop(onClose)
 	backdrop.BorderSizePixel = 0
 	backdrop.Size = UDim2.fromScale(1, 1)
 	backdrop.ZIndex = Z.Backdrop
-	backdrop.Parent = NullUI._Root
+	backdrop.Parent = VVindUI._Root
 	backdrop.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1
 			or input.UserInputType == Enum.UserInputType.Touch then
@@ -1107,7 +1099,7 @@ local KeybindCapturing = false
 local NotificationQueue = {}
  
 local function GetNotifyHolder()
-	local root = NullUI._Root
+	local root = VVindUI._Root
 	local holder = root:FindFirstChild("NotificationHolder")
 	if holder then return holder end
  
@@ -1164,7 +1156,7 @@ local function GetNotifyHolder()
 	return holder
 end
  
-NullUI._NotifyCounter = 0
+VVindUI._NotifyCounter = 0
  
 local NotifyIcons = {
 	info    = "info",
@@ -1180,29 +1172,29 @@ local NotifyColors = {
 	error   = Color3.fromRGB(255, 105, 105),
 }
  
-function NullUI:Notify(opts)
+function VVindUI:Notify(opts)
 	opts = opts or {}
 	local title      = opts.Title or "Notification"
 	local text       = opts.Text or ""
 	local duration   = opts.Duration or 4
 	local notifyType = opts.Type or "info"
-	local color      = opts.Color or NotifyColors[notifyType] or NullUI.Theme.Accent
+	local color      = opts.Color or NotifyColors[notifyType] or VVindUI.Theme.Accent
 	local iconName   = opts.Icon or NotifyIcons[notifyType] or NotifyIcons.info
  
 	local holder = GetNotifyHolder()
-	NullUI._NotifyCounter = NullUI._NotifyCounter + 1
+	VVindUI._NotifyCounter = VVindUI._NotifyCounter + 1
  
 	local dismiss
  
 	local card = Instance.new("Frame")
 	card.Name = "Notification"
-	card.BackgroundColor3 = NullUI.Theme.Surface
+	card.BackgroundColor3 = VVindUI.Theme.Surface
 	card.BackgroundTransparency = 1
 	card.BorderSizePixel = 0
 	card.ClipsDescendants = true
 	card.AutomaticSize = Enum.AutomaticSize.Y
 	card.Size = UDim2.new(1, 0, 0, 0)
-	card.LayoutOrder = NullUI._NotifyCounter
+	card.LayoutOrder = VVindUI._NotifyCounter
 	card.ZIndex = Z.Toast
 	card.Visible = false
 	card.Parent = holder
@@ -1252,9 +1244,9 @@ function NullUI:Notify(opts)
  
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.BackgroundTransparency = 1
-	titleLabel.FontFace = NullUI.Theme.Font
+	titleLabel.FontFace = VVindUI.Theme.Font
 	titleLabel.Text = title
-	titleLabel.TextColor3 = NullUI.Theme.Text
+	titleLabel.TextColor3 = VVindUI.Theme.Text
 	titleLabel.TextTransparency = 1
 	titleLabel.TextSize = 14
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -1268,9 +1260,9 @@ function NullUI:Notify(opts)
 	if text ~= "" then
 		textLabel = Instance.new("TextLabel")
 		textLabel.BackgroundTransparency = 1
-		textLabel.FontFace = NullUI.Theme.FontRegular
+		textLabel.FontFace = VVindUI.Theme.FontRegular
 		textLabel.Text = text
-		textLabel.TextColor3 = NullUI.Theme.TextDim
+		textLabel.TextColor3 = VVindUI.Theme.TextDim
 		textLabel.TextTransparency = 1
 		textLabel.TextSize = 12
 		textLabel.TextWrapped = true
@@ -1321,7 +1313,7 @@ function NullUI:Notify(opts)
  
 			local lbl = Instance.new("TextLabel")
 			lbl.BackgroundTransparency = 1
-			lbl.FontFace = NullUI.Theme.Font
+			lbl.FontFace = VVindUI.Theme.Font
 			lbl.Text = action.Text or "Action"
 			lbl.TextColor3 = color
 			lbl.TextTransparency = 1
@@ -1450,7 +1442,7 @@ local function ComputeDialogCenter(anchorFrame)
 	return cx, cy
 end
  
-function NullUI:Confirm(opts)
+function VVindUI:Confirm(opts)
 	opts = opts or {}
 	local title       = opts.Title or "Confirm"
 	local text        = opts.Text or ""
@@ -1462,7 +1454,7 @@ function NullUI:Confirm(opts)
 		anchorFrame = anchorFrame._gui
 	end
  
-	local root = NullUI._Root
+	local root = VVindUI._Root
 	local jan = Janitor.new()
  
 	local backdrop = Instance.new("TextButton")
@@ -1484,7 +1476,7 @@ function NullUI:Confirm(opts)
 		local s = GetUIScale()
 		dialog.Position = UDim2.fromOffset(math.round(cx / s), math.round(cy / s))
 	end
-	dialog.BackgroundColor3 = NullUI.Theme.Surface
+	dialog.BackgroundColor3 = VVindUI.Theme.Surface
 	dialog.BackgroundTransparency = 1
 	dialog.BorderSizePixel = 0
 	dialog.Active = true
@@ -1514,9 +1506,9 @@ function NullUI:Confirm(opts)
  
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.BackgroundTransparency = 1
-	titleLabel.FontFace = NullUI.Theme.Font
+	titleLabel.FontFace = VVindUI.Theme.Font
 	titleLabel.Text = title
-	titleLabel.TextColor3 = danger and NullUI.Theme.Danger or NullUI.Theme.Text
+	titleLabel.TextColor3 = danger and VVindUI.Theme.Danger or VVindUI.Theme.Text
 	titleLabel.TextTransparency = 1
 	titleLabel.TextSize = 18
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -1531,9 +1523,9 @@ function NullUI:Confirm(opts)
 	if text ~= "" then
 		textLabel = Instance.new("TextLabel")
 		textLabel.BackgroundTransparency = 1
-		textLabel.FontFace = NullUI.Theme.FontRegular
+		textLabel.FontFace = VVindUI.Theme.FontRegular
 		textLabel.Text = text
-		textLabel.TextColor3 = NullUI.Theme.TextDim
+		textLabel.TextColor3 = VVindUI.Theme.TextDim
 		textLabel.TextTransparency = 1
 		textLabel.TextSize = 14
 		textLabel.TextWrapped = true
@@ -1564,7 +1556,7 @@ function NullUI:Confirm(opts)
 	rowLayout.Parent = buttonsRow
  
 	local function makeButton(text_, order, filled)
-		local tint = (filled and danger) and NullUI.Theme.Danger or Color3.new(1, 1, 1)
+		local tint = (filled and danger) and VVindUI.Theme.Danger or Color3.new(1, 1, 1)
  
 		local btn = Instance.new("TextButton")
 		btn.Text = ""
@@ -1581,9 +1573,9 @@ function NullUI:Confirm(opts)
  
 		local lbl = Instance.new("TextLabel")
 		lbl.BackgroundTransparency = 1
-		lbl.FontFace = NullUI.Theme.Font
+		lbl.FontFace = VVindUI.Theme.Font
 		lbl.Text = text_
-		lbl.TextColor3 = (filled and danger) and NullUI.Theme.Danger or NullUI.Theme.Text
+		lbl.TextColor3 = (filled and danger) and VVindUI.Theme.Danger or VVindUI.Theme.Text
 		lbl.TextSize = 14
 		lbl.Size = UDim2.fromScale(1, 1)
 		lbl.ZIndex = Z.ModalTop + 2
@@ -1650,7 +1642,7 @@ function NullUI:Confirm(opts)
 	return { Close = close }
 end
  
-function NullUI:Modal(opts)
+function VVindUI:Modal(opts)
 	opts = opts or {}
 	local title       = opts.Title or "Modal"
 	local text        = opts.Text or ""
@@ -1663,7 +1655,7 @@ function NullUI:Modal(opts)
 		anchorFrame = anchorFrame._gui
 	end
  
-	local root = NullUI._Root
+	local root = VVindUI._Root
 	local jan = Janitor.new()
  
 	local backdrop = Instance.new("TextButton")
@@ -1685,7 +1677,7 @@ function NullUI:Modal(opts)
 		local s = GetUIScale()
 		dialog.Position = UDim2.fromOffset(math.round(cx / s), math.round(cy / s))
 	end
-	dialog.BackgroundColor3 = NullUI.Theme.Surface
+	dialog.BackgroundColor3 = VVindUI.Theme.Surface
 	dialog.BackgroundTransparency = 1
 	dialog.BorderSizePixel = 0
 	dialog.Active = true
@@ -1715,9 +1707,9 @@ function NullUI:Modal(opts)
  
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.BackgroundTransparency = 1
-	titleLabel.FontFace = NullUI.Theme.Font
+	titleLabel.FontFace = VVindUI.Theme.Font
 	titleLabel.Text = title
-	titleLabel.TextColor3 = danger and NullUI.Theme.Danger or NullUI.Theme.Text
+	titleLabel.TextColor3 = danger and VVindUI.Theme.Danger or VVindUI.Theme.Text
 	titleLabel.TextTransparency = 1
 	titleLabel.TextSize = 18
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -1732,9 +1724,9 @@ function NullUI:Modal(opts)
 	if text ~= "" then
 		textLabel = Instance.new("TextLabel")
 		textLabel.BackgroundTransparency = 1
-		textLabel.FontFace = NullUI.Theme.FontRegular
+		textLabel.FontFace = VVindUI.Theme.FontRegular
 		textLabel.Text = text
-		textLabel.TextColor3 = NullUI.Theme.TextDim
+		textLabel.TextColor3 = VVindUI.Theme.TextDim
 		textLabel.TextTransparency = 1
 		textLabel.TextSize = 13
 		textLabel.TextWrapped = true
@@ -1783,9 +1775,9 @@ function NullUI:Modal(opts)
 		if labelH > 0 then
 			local lbl = Instance.new("TextLabel")
 			lbl.BackgroundTransparency = 1
-			lbl.FontFace = NullUI.Theme.FontRegular
+			lbl.FontFace = VVindUI.Theme.FontRegular
 			lbl.Text = string.upper(field.Label)
-			lbl.TextColor3 = danger and NullUI.Theme.Danger or NullUI.Theme.TextDim
+			lbl.TextColor3 = danger and VVindUI.Theme.Danger or VVindUI.Theme.TextDim
 			lbl.TextSize = 11
 			lbl.TextXAlignment = Enum.TextXAlignment.Left
 			lbl.Size = UDim2.new(1, 0, 0, labelH)
@@ -1814,11 +1806,11 @@ function NullUI:Modal(opts)
 		local box = Instance.new("TextBox")
 		box.ClearTextOnFocus = false
 		box.MultiLine = isTextarea
-		box.FontFace = NullUI.Theme.FontRegular
+		box.FontFace = VVindUI.Theme.FontRegular
 		box.PlaceholderText = field.Placeholder or ""
 		box.PlaceholderColor3 = Color3.fromRGB(120, 120, 122)
 		box.Text = tostring(field.Default or "")
-		box.TextColor3 = NullUI.Theme.Text
+		box.TextColor3 = VVindUI.Theme.Text
 		box.TextSize = 13
 		box.TextXAlignment = Enum.TextXAlignment.Left
 		box.TextYAlignment = isTextarea and Enum.TextYAlignment.Top or Enum.TextYAlignment.Center
@@ -1838,7 +1830,7 @@ function NullUI:Modal(opts)
 		end
  
 		jan:Add(box.Focused:Connect(function()
-			Tween(fieldStroke, { Color = NullUI.Theme.Accent, Transparency = 0.3 }, 0.15)
+			Tween(fieldStroke, { Color = VVindUI.Theme.Accent, Transparency = 0.3 }, 0.15)
 			Tween(fieldFrame, { BackgroundTransparency = 0.85 }, 0.15)
 		end))
 		jan:Add(box.FocusLost:Connect(function()
@@ -1867,7 +1859,7 @@ function NullUI:Modal(opts)
 	rowLayout.Parent = buttonsRow
  
 	local function makeButton(text_, order, filled)
-		local tint = (filled and danger) and NullUI.Theme.Danger or Color3.new(1, 1, 1)
+		local tint = (filled and danger) and VVindUI.Theme.Danger or Color3.new(1, 1, 1)
  
 		local btn = Instance.new("TextButton")
 		btn.Text = ""
@@ -1884,9 +1876,9 @@ function NullUI:Modal(opts)
  
 		local lbl = Instance.new("TextLabel")
 		lbl.BackgroundTransparency = 1
-		lbl.FontFace = NullUI.Theme.Font
+		lbl.FontFace = VVindUI.Theme.Font
 		lbl.Text = text_
-		lbl.TextColor3 = (filled and danger) and NullUI.Theme.Danger or NullUI.Theme.Text
+		lbl.TextColor3 = (filled and danger) and VVindUI.Theme.Danger or VVindUI.Theme.Text
 		lbl.TextSize = 14
 		lbl.Size = UDim2.fromScale(1, 1)
 		lbl.ZIndex = Z.ModalTop + 2
@@ -2152,7 +2144,7 @@ local function BaseCard(parent, height)
 	card.Size = UDim2.new(1, 0, 0, height or 44)
 	card.ZIndex = Z.Content
 	card.Parent = parent
-	Corner(card, NullUI.Theme.CornerRadiusSm)
+	Corner(card, VVindUI.Theme.CornerRadiusSm)
 	Stroke(card, Color3.new(1, 1, 1), 1, 0.95)
 	return card
 end
@@ -2165,7 +2157,7 @@ local function AddLeadingIcon(card, icon, height)
 	img.Name = "LeadingIcon"
 	img.BackgroundTransparency = 1
 	img.Image = asset
-	img.ImageColor3 = NullUI.Theme.TextDim
+	img.ImageColor3 = VVindUI.Theme.TextDim
 	img.Size = UDim2.fromOffset(16, 16)
 	img.AnchorPoint = Vector2.new(0, 0.5)
 	img.Position = UDim2.new(0, 14, 0.5, 0)
@@ -2182,9 +2174,9 @@ local function AddTitleDesc(card, x, rightReserve, title, description, baseHeigh
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.Name = "Title"
 	titleLabel.BackgroundTransparency = 1
-	titleLabel.FontFace = NullUI.Theme.Font
+	titleLabel.FontFace = VVindUI.Theme.Font
 	titleLabel.Text = title
-	titleLabel.TextColor3 = NullUI.Theme.Text
+	titleLabel.TextColor3 = VVindUI.Theme.Text
 	titleLabel.TextSize = 14
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.TextYAlignment = Enum.TextYAlignment.Center
@@ -2199,9 +2191,9 @@ local function AddTitleDesc(card, x, rightReserve, title, description, baseHeigh
 		descLabel = Instance.new("TextLabel")
 		descLabel.Name = "Description"
 		descLabel.BackgroundTransparency = 1
-		descLabel.FontFace = NullUI.Theme.FontRegular
+		descLabel.FontFace = VVindUI.Theme.FontRegular
 		descLabel.Text = description
-		descLabel.TextColor3 = NullUI.Theme.TextDim
+		descLabel.TextColor3 = VVindUI.Theme.TextDim
 		descLabel.TextSize = 12
 		descLabel.TextWrapped = true
 		descLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -2267,7 +2259,7 @@ local function AddEmptyState(scroll, overlayParent, janitor)
 	local icon = Instance.new("ImageLabel")
 	icon.BackgroundTransparency = 1
 	icon.Image = ResolveIcon("frown")
-	icon.ImageColor3 = NullUI.Theme.TextDim
+	icon.ImageColor3 = VVindUI.Theme.TextDim
 	icon.Size = UDim2.fromOffset(26, 26)
 	icon.LayoutOrder = 1
 	icon.ZIndex = emptyState.ZIndex + 1
@@ -2275,9 +2267,9 @@ local function AddEmptyState(scroll, overlayParent, janitor)
  
 	local label = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
-	label.FontFace = NullUI.Theme.FontRegular
+	label.FontFace = VVindUI.Theme.FontRegular
 	label.Text = "There's nothing here yet"
-	label.TextColor3 = NullUI.Theme.TextDim
+	label.TextColor3 = VVindUI.Theme.TextDim
 	label.TextSize = 13
 	label.AutomaticSize = Enum.AutomaticSize.XY
 	label.Size = UDim2.fromOffset(0, 16)
@@ -2310,7 +2302,7 @@ Window.__index = Window
 local Tab = {}
 Tab.__index = Tab
  
-function NullUI:CreateWindow(opts)
+function VVindUI:CreateWindow(opts)
 	opts = opts or {}
 	if self.SetConfigFolder then self:SetConfigFolder(opts.Folder) end
 	if self.LoadAutoConfig then self:LoadAutoConfig() end
@@ -2325,9 +2317,9 @@ function NullUI:CreateWindow(opts)
 			math.floor((vp.Y / s) * 0.96)
 		)
 	end
-	local margin = NullUI.Theme.Margin
+	local margin = VVindUI.Theme.Margin
  
-	local root = NullUI._Root
+	local root = VVindUI._Root
 	local jan = Janitor.new()
 	local windowPosition = UDim2.fromScale(0.5, IsMobileDevice and 0.5 or 0.55)
 	-- Keep the shadow outside main because main clips its children.
@@ -2354,15 +2346,15 @@ function NullUI:CreateWindow(opts)
 	main.AnchorPoint = Vector2.new(0.5, 0.5)
 	main.Position = windowPosition
 	main.Size = size
-	main.BackgroundColor3 = NullUI.Theme.Background
+	main.BackgroundColor3 = VVindUI.Theme.Background
 	main.BackgroundTransparency = 1
 	main.BorderSizePixel = 0
 	main.ClipsDescendants = true
 	main.ZIndex = Z.Window
 	main.Parent = root
-	Corner(main, NullUI.Theme.CornerRadius)
+	Corner(main, VVindUI.Theme.CornerRadius)
 	Stroke(main, Color3.new(1, 1, 1), 1, 0.92)
-	GlassLayer(main, NullUI.Theme.CornerRadius, 0.985)
+	GlassLayer(main, VVindUI.Theme.CornerRadius, 0.985)
 
 	local function syncShadow()
 		shadow.AnchorPoint = main.AnchorPoint
@@ -2420,7 +2412,7 @@ function NullUI:CreateWindow(opts)
 		local ic = Instance.new("ImageLabel")
 		ic.BackgroundTransparency = 1
 		ic.Image = ResolveIcon(icon)
-		ic.ImageColor3 = NullUI.Theme.TextDim
+		ic.ImageColor3 = VVindUI.Theme.TextDim
 		ic.Size = UDim2.fromOffset(14, 14)
 		ic.AnchorPoint = Vector2.new(0.5, 0.5)
 		ic.Position = UDim2.fromScale(0.5, 0.5)
@@ -2429,11 +2421,11 @@ function NullUI:CreateWindow(opts)
  
 		jan:Add(btn.MouseEnter:Connect(function()
 			Tween(btn, { BackgroundTransparency = 0.9 }, 0.12)
-			Tween(ic, { ImageColor3 = hoverColor or NullUI.Theme.Text }, 0.12)
+			Tween(ic, { ImageColor3 = hoverColor or VVindUI.Theme.Text }, 0.12)
 		end))
 		jan:Add(btn.MouseLeave:Connect(function()
 			Tween(btn, { BackgroundTransparency = 1 }, 0.12)
-			Tween(ic, { ImageColor3 = NullUI.Theme.TextDim }, 0.12)
+			Tween(ic, { ImageColor3 = VVindUI.Theme.TextDim }, 0.12)
 		end))
 		return btn
 	end
@@ -2452,7 +2444,7 @@ function NullUI:CreateWindow(opts)
 		windowIcon.Name = "WindowIcon"
 		windowIcon.BackgroundTransparency = 1
 		windowIcon.Image = ResolveIcon(opts.Icon)
-		windowIcon.ImageColor3 = NullUI.Theme.Text
+		windowIcon.ImageColor3 = VVindUI.Theme.Text
 		windowIcon.Size = UDim2.fromOffset(20, 20)
 		windowIcon.AnchorPoint = Vector2.new(0, 0.5)
 		windowIcon.Position = UDim2.new(0, titleStartX, 0.5, 0)
@@ -2464,9 +2456,9 @@ function NullUI:CreateWindow(opts)
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.Name = "Title"
 	titleLabel.BackgroundTransparency = 1
-	titleLabel.FontFace = NullUI.Theme.Font
+	titleLabel.FontFace = VVindUI.Theme.Font
 	titleLabel.Text = opts.Title or "Window"
-	titleLabel.TextColor3 = NullUI.Theme.Text
+	titleLabel.TextColor3 = VVindUI.Theme.Text
 	titleLabel.TextSize = 16
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.TextYAlignment = Enum.TextYAlignment.Center
@@ -2481,9 +2473,9 @@ function NullUI:CreateWindow(opts)
 		subLabel = Instance.new("TextLabel")
 		subLabel.Name = "Subtitle"
 		subLabel.BackgroundTransparency = 1
-		subLabel.FontFace = NullUI.Theme.FontRegular
+		subLabel.FontFace = VVindUI.Theme.FontRegular
 		subLabel.Text = opts.Subtitle
-		subLabel.TextColor3 = NullUI.Theme.TextDim
+		subLabel.TextColor3 = VVindUI.Theme.TextDim
 		subLabel.TextSize = 13
 		subLabel.TextXAlignment = Enum.TextXAlignment.Left
 		subLabel.TextYAlignment = Enum.TextYAlignment.Center
@@ -2558,7 +2550,7 @@ function NullUI:CreateWindow(opts)
 	resizeHandle.BackgroundTransparency = 1
 	resizeHandle.AutoButtonColor = false
 	resizeHandle.Image = "rbxassetid://120997033468887"
-	resizeHandle.ImageColor3 = NullUI.Theme.TextDim
+	resizeHandle.ImageColor3 = VVindUI.Theme.TextDim
 	resizeHandle.ImageTransparency = 0.35
 	resizeHandle.AnchorPoint = Vector2.new(1, 1)
 	resizeHandle.Position = UDim2.new(1, -4, 1, -4)
@@ -2598,7 +2590,7 @@ function NullUI:CreateWindow(opts)
 		_tabChangeListeners = {},
 	}, Window)
  
-	table.insert(NullUI._Windows, self)
+	table.insert(VVindUI._Windows, self)
  
 	if opts.Draggable ~= false then
 		self._drag = SetupSmoothDrag(main, topbar, jan)
@@ -2630,7 +2622,7 @@ function NullUI:CreateWindow(opts)
 	end
  
 	jan:Add(closeBtn.MouseButton1Click:Connect(function()
-		NullUI:Confirm({
+		VVindUI:Confirm({
 			Title = "Close Window",
 			Text = "Do you want to close this window? You will not be able to open it again. "
 				.. "If you just want to hide it, use the minimize button instead.",
@@ -2737,7 +2729,7 @@ function NullUI:CreateWindow(opts)
  
 		jan:Add(mobileToggle)
 	elseif toggleKey then
-		NullUI:Notify({
+		VVindUI:Notify({
 			Title = "Minimize Keybind",
 			Text  = "Press " .. toggleKey.Name .. " to minimize or open this panel.",
 			Type  = "info",
@@ -2761,8 +2753,8 @@ function Window:Destroy()
 	if self._destroyed then return end
 	self._destroyed = true
  
-	local idx = table.find(NullUI._Windows, self)
-	if idx then table.remove(NullUI._Windows, idx) end
+	local idx = table.find(VVindUI._Windows, self)
+	if idx then table.remove(VVindUI._Windows, idx) end
  
 	CloseAnyOpenPopup()
  
@@ -2898,7 +2890,7 @@ local DOCK_HEIGHT    = 34
 function Window:AddDockButton(opts)
 	opts = opts or {}
 	local jan = self._janitor
-	local margin = NullUI.Theme.Margin
+	local margin = VVindUI.Theme.Margin
  
 	if not self._dock then
 		local shrunkSize = UDim2.new(0, 130, 1, -(58 + margin + DOCK_HEIGHT + 10))
@@ -2939,7 +2931,7 @@ function Window:AddDockButton(opts)
 	local icon = Instance.new("ImageLabel")
 	icon.BackgroundTransparency = 1
 	icon.Image = opts.Icon and ResolveIcon(opts.Icon) or ""
-	icon.ImageColor3 = NullUI.Theme.TextDim
+	icon.ImageColor3 = VVindUI.Theme.TextDim
 	icon.Size = UDim2.fromOffset(15, 15)
 	icon.AnchorPoint = Vector2.new(0.5, 0.5)
 	icon.Position = UDim2.fromScale(0.5, 0.5)
@@ -2951,12 +2943,12 @@ function Window:AddDockButton(opts)
 	jan:Add(btn.MouseEnter:Connect(function()
 		if active then return end
 		Tween(btn, { BackgroundTransparency = 0.85 }, 0.12)
-		Tween(icon, { ImageColor3 = NullUI.Theme.Text }, 0.12)
+		Tween(icon, { ImageColor3 = VVindUI.Theme.Text }, 0.12)
 	end))
 	jan:Add(btn.MouseLeave:Connect(function()
 		if active then return end
 		Tween(btn, { BackgroundTransparency = 0.95 }, 0.12)
-		Tween(icon, { ImageColor3 = NullUI.Theme.TextDim }, 0.12)
+		Tween(icon, { ImageColor3 = VVindUI.Theme.TextDim }, 0.12)
 	end))
 	jan:Add(btn.MouseButton1Click:Connect(function()
 		if opts.Callback then task.spawn(opts.Callback) end
@@ -2968,7 +2960,7 @@ function Window:AddDockButton(opts)
 		SetActive = function(_, isActive)
 			active = isActive and true or false
 			Tween(btn, { BackgroundTransparency = active and 0.8 or 0.95 }, 0.12)
-			Tween(icon, { ImageColor3 = active and NullUI.Theme.Text or NullUI.Theme.TextDim }, 0.12)
+			Tween(icon, { ImageColor3 = active and VVindUI.Theme.Text or VVindUI.Theme.TextDim }, 0.12)
 		end,
 	}
 end
@@ -3178,7 +3170,7 @@ function Window:AddDefaultCreditsPanel()
 	local titleIcon = Instance.new("ImageLabel")
 	titleIcon.BackgroundTransparency = 1
 	titleIcon.Image = ResolveIcon("heart-handshake")
-	titleIcon.ImageColor3 = NullUI.Theme.Text
+	titleIcon.ImageColor3 = VVindUI.Theme.Text
 	titleIcon.Size = UDim2.fromOffset(14, 14)
 	titleIcon.LayoutOrder = 1
 	titleIcon.ZIndex = Z.Content + 3
@@ -3186,9 +3178,9 @@ function Window:AddDefaultCreditsPanel()
  
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.BackgroundTransparency = 1
-	titleLabel.FontFace = NullUI.Theme.Font
+	titleLabel.FontFace = VVindUI.Theme.Font
 	titleLabel.Text = "Credits"
-	titleLabel.TextColor3 = NullUI.Theme.Text
+	titleLabel.TextColor3 = VVindUI.Theme.Text
 	titleLabel.TextSize = 14
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.AutomaticSize = Enum.AutomaticSize.X
@@ -3212,15 +3204,15 @@ function Window:AddDefaultCreditsPanel()
 	local closeIcon = Instance.new("ImageLabel")
 	closeIcon.BackgroundTransparency = 1
 	closeIcon.Image = ResolveIcon("x")
-	closeIcon.ImageColor3 = NullUI.Theme.TextDim
+	closeIcon.ImageColor3 = VVindUI.Theme.TextDim
 	closeIcon.Size = UDim2.fromOffset(13, 13)
 	closeIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 	closeIcon.Position = UDim2.fromScale(0.5, 0.5)
 	closeIcon.ZIndex = Z.Content + 3
 	closeIcon.Parent = closeBtn
  
-	closeBtn.MouseEnter:Connect(function() closeIcon.ImageColor3 = NullUI.Theme.Text end)
-	closeBtn.MouseLeave:Connect(function() closeIcon.ImageColor3 = NullUI.Theme.TextDim end)
+	closeBtn.MouseEnter:Connect(function() closeIcon.ImageColor3 = VVindUI.Theme.Text end)
+	closeBtn.MouseLeave:Connect(function() closeIcon.ImageColor3 = VVindUI.Theme.TextDim end)
 	closeBtn.MouseButton1Click:Connect(function() panel.Close() end)
  
 	local divider = Instance.new("Frame")
@@ -3315,9 +3307,9 @@ function Window:AddDefaultCreditsPanel()
  
 		local nameLabel = Instance.new("TextLabel")
 		nameLabel.BackgroundTransparency = 1
-		nameLabel.FontFace = NullUI.Theme.Font
+		nameLabel.FontFace = VVindUI.Theme.Font
 		nameLabel.Text = credit.Name
-		nameLabel.TextColor3 = NullUI.Theme.Text
+		nameLabel.TextColor3 = VVindUI.Theme.Text
 		nameLabel.TextSize = 13.5
 		nameLabel.TextXAlignment = Enum.TextXAlignment.Left
 		nameLabel.Position = UDim2.fromOffset(62, 8)
@@ -3327,9 +3319,9 @@ function Window:AddDefaultCreditsPanel()
  
 		local roleLabel = Instance.new("TextLabel")
 		roleLabel.BackgroundTransparency = 1
-		roleLabel.FontFace = NullUI.Theme.FontRegular
+		roleLabel.FontFace = VVindUI.Theme.FontRegular
 		roleLabel.Text = credit.Role
-		roleLabel.TextColor3 = NullUI.Theme.TextDim
+		roleLabel.TextColor3 = VVindUI.Theme.TextDim
 		roleLabel.TextSize = 11.5
 		roleLabel.TextWrapped = true
 		roleLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -3417,9 +3409,9 @@ function Window:AddSpotifyPanel(opts)
  
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.BackgroundTransparency = 1
-	titleLabel.FontFace = NullUI.Theme.Font
+	titleLabel.FontFace = VVindUI.Theme.Font
 	titleLabel.Text = opts.Title or "Spotify Player"
-	titleLabel.TextColor3 = NullUI.Theme.Text
+	titleLabel.TextColor3 = VVindUI.Theme.Text
 	titleLabel.TextSize = 14
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.AnchorPoint = Vector2.new(0, 0.5)
@@ -3441,7 +3433,7 @@ function Window:AddSpotifyPanel(opts)
 	local closeIcon = Instance.new("ImageLabel")
 	closeIcon.BackgroundTransparency = 1
 	closeIcon.Image = ResolveIcon("x")
-	closeIcon.ImageColor3 = NullUI.Theme.TextDim
+	closeIcon.ImageColor3 = VVindUI.Theme.TextDim
 	closeIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 	closeIcon.Position = UDim2.fromScale(0.5, 0.5)
 	closeIcon.Size = UDim2.fromOffset(13, 13)
@@ -3529,9 +3521,9 @@ function Window:AddSpotifyPanel(opts)
  
 	local statusLabel = Instance.new("TextLabel")
 	statusLabel.BackgroundTransparency = 1
-	statusLabel.FontFace = NullUI.Theme.FontRegular
+	statusLabel.FontFace = VVindUI.Theme.FontRegular
 	statusLabel.Text = "Bridge disconnected"
-	statusLabel.TextColor3 = NullUI.Theme.TextDim
+	statusLabel.TextColor3 = VVindUI.Theme.TextDim
 	statusLabel.TextSize = 12
 	statusLabel.TextXAlignment = Enum.TextXAlignment.Left
 	statusLabel.Position = UDim2.fromOffset(27, 0)
@@ -3608,7 +3600,7 @@ function Window:AddSpotifyPanel(opts)
  
 	local nowPlayingTag = Instance.new("TextLabel")
 	nowPlayingTag.BackgroundTransparency = 1
-	nowPlayingTag.FontFace = NullUI.Theme.Font
+	nowPlayingTag.FontFace = VVindUI.Theme.Font
 	nowPlayingTag.Text = "NOW PLAYING"
 	nowPlayingTag.TextColor3 = Color3.fromRGB(30, 215, 96)
 	nowPlayingTag.TextSize = 9
@@ -3620,9 +3612,9 @@ function Window:AddSpotifyPanel(opts)
  
 	local trackLabel = Instance.new("TextLabel")
 	trackLabel.BackgroundTransparency = 1
-	trackLabel.FontFace = NullUI.Theme.Font
+	trackLabel.FontFace = VVindUI.Theme.Font
 	trackLabel.Text = "Nothing playing"
-	trackLabel.TextColor3 = NullUI.Theme.Text
+	trackLabel.TextColor3 = VVindUI.Theme.Text
 	trackLabel.TextSize = 15
 	trackLabel.TextXAlignment = Enum.TextXAlignment.Left
 	trackLabel.TextTruncate = Enum.TextTruncate.AtEnd
@@ -3633,9 +3625,9 @@ function Window:AddSpotifyPanel(opts)
  
 	local artistLabel = Instance.new("TextLabel")
 	artistLabel.BackgroundTransparency = 1
-	artistLabel.FontFace = NullUI.Theme.FontRegular
+	artistLabel.FontFace = VVindUI.Theme.FontRegular
 	artistLabel.Text = "Connect your Spotify bridge"
-	artistLabel.TextColor3 = NullUI.Theme.TextDim
+	artistLabel.TextColor3 = VVindUI.Theme.TextDim
 	artistLabel.TextSize = 12
 	artistLabel.TextXAlignment = Enum.TextXAlignment.Left
 	artistLabel.TextTruncate = Enum.TextTruncate.AtEnd
@@ -3686,9 +3678,9 @@ function Window:AddSpotifyPanel(opts)
 	Stroke(seekBubble, Color3.new(1, 1, 1), 1, 0.9)
 	local seekBubbleLabel = Instance.new("TextLabel")
 	seekBubbleLabel.BackgroundTransparency = 1
-	seekBubbleLabel.FontFace = NullUI.Theme.Font
+	seekBubbleLabel.FontFace = VVindUI.Theme.Font
 	seekBubbleLabel.Text = "0:00"
-	seekBubbleLabel.TextColor3 = NullUI.Theme.Text
+	seekBubbleLabel.TextColor3 = VVindUI.Theme.Text
 	seekBubbleLabel.TextSize = 10
 	seekBubbleLabel.Size = UDim2.fromScale(1, 1)
 	seekBubbleLabel.ZIndex = Z.Content + 9
@@ -3706,9 +3698,9 @@ function Window:AddSpotifyPanel(opts)
  
 	local timeLabel = Instance.new("TextLabel")
 	timeLabel.BackgroundTransparency = 1
-	timeLabel.FontFace = NullUI.Theme.FontRegular
+	timeLabel.FontFace = VVindUI.Theme.FontRegular
 	timeLabel.Text = "0:00"
-	timeLabel.TextColor3 = NullUI.Theme.TextDim
+	timeLabel.TextColor3 = VVindUI.Theme.TextDim
 	timeLabel.TextSize = 10
 	timeLabel.TextXAlignment = Enum.TextXAlignment.Left
 	timeLabel.Position = UDim2.fromOffset(100, 87)
@@ -3718,9 +3710,9 @@ function Window:AddSpotifyPanel(opts)
  
 	local durationLabel = Instance.new("TextLabel")
 	durationLabel.BackgroundTransparency = 1
-	durationLabel.FontFace = NullUI.Theme.FontRegular
+	durationLabel.FontFace = VVindUI.Theme.FontRegular
 	durationLabel.Text = "0:00"
-	durationLabel.TextColor3 = NullUI.Theme.TextDim
+	durationLabel.TextColor3 = VVindUI.Theme.TextDim
 	durationLabel.TextSize = 10
 	durationLabel.TextXAlignment = Enum.TextXAlignment.Right
 	durationLabel.Position = UDim2.new(0.5, 50, 0, 87)
@@ -3770,7 +3762,7 @@ function Window:AddSpotifyPanel(opts)
 		local image = Instance.new("ImageLabel")
 		image.BackgroundTransparency = 1
 		image.Image = ResolveIcon(icon)
-		image.ImageColor3 = primary and Color3.fromRGB(12, 28, 18) or NullUI.Theme.TextDim
+		image.ImageColor3 = primary and Color3.fromRGB(12, 28, 18) or VVindUI.Theme.TextDim
 		image.AnchorPoint = Vector2.new(0.5, 0.5)
 		image.Position = UDim2.fromScale(0.5, 0.5)
 		image.Size = UDim2.fromOffset(primary and 17 or 15, primary and 17 or 15)
@@ -3790,9 +3782,9 @@ function Window:AddSpotifyPanel(opts)
 		local card = makeCard(66, order)
 		local label = Instance.new("TextLabel")
 		label.BackgroundTransparency = 1
-		label.FontFace = NullUI.Theme.Font
+		label.FontFace = VVindUI.Theme.Font
 		label.Text = title
-		label.TextColor3 = NullUI.Theme.Text
+		label.TextColor3 = VVindUI.Theme.Text
 		label.TextSize = 12
 		label.TextXAlignment = Enum.TextXAlignment.Left
 		label.Position = UDim2.fromOffset(11, 6)
@@ -3826,7 +3818,7 @@ function Window:AddSpotifyPanel(opts)
 		local buttonImage = Instance.new("ImageLabel")
 		buttonImage.BackgroundTransparency = 1
 		buttonImage.Image = ResolveIcon(buttonIcon)
-		buttonImage.ImageColor3 = NullUI.Theme.Text
+		buttonImage.ImageColor3 = VVindUI.Theme.Text
 		buttonImage.AnchorPoint = Vector2.new(0.5, 0.5)
 		buttonImage.Position = UDim2.fromScale(0.5, 0.5)
 		buttonImage.Size = UDim2.fromOffset(14, 14)
@@ -3835,11 +3827,11 @@ function Window:AddSpotifyPanel(opts)
  
 		local box = Instance.new("TextBox")
 		box.ClearTextOnFocus = false
-		box.FontFace = NullUI.Theme.FontRegular
+		box.FontFace = VVindUI.Theme.FontRegular
 		box.PlaceholderText = placeholder
 		box.PlaceholderColor3 = Color3.fromRGB(115, 120, 118)
 		box.Text = ""
-		box.TextColor3 = NullUI.Theme.Text
+		box.TextColor3 = VVindUI.Theme.Text
 		box.TextSize = 11
 		box.TextXAlignment = Enum.TextXAlignment.Left
 		box.BackgroundTransparency = 1
@@ -3914,9 +3906,9 @@ function Window:AddSpotifyPanel(opts)
 	local favoritesHeader = makeCard(137, 2, favoritesSubTab._page)
 	local favoritesTitle = Instance.new("TextLabel")
 	favoritesTitle.BackgroundTransparency = 1
-	favoritesTitle.FontFace = NullUI.Theme.Font
+	favoritesTitle.FontFace = VVindUI.Theme.Font
 	favoritesTitle.Text = "Favorite playlists"
-	favoritesTitle.TextColor3 = NullUI.Theme.Text
+	favoritesTitle.TextColor3 = VVindUI.Theme.Text
 	favoritesTitle.TextSize = 14
 	favoritesTitle.TextXAlignment = Enum.TextXAlignment.Left
 	favoritesTitle.Position = UDim2.fromOffset(12, 8)
@@ -3926,9 +3918,9 @@ function Window:AddSpotifyPanel(opts)
 	favoritesTitle.Visible = false
 	local favoritesHint = Instance.new("TextLabel")
 	favoritesHint.BackgroundTransparency = 1
-	favoritesHint.FontFace = NullUI.Theme.FontRegular
+	favoritesHint.FontFace = VVindUI.Theme.FontRegular
 	favoritesHint.Text = "Save and load your playlists with one tap"
-	favoritesHint.TextColor3 = NullUI.Theme.TextDim
+	favoritesHint.TextColor3 = VVindUI.Theme.TextDim
 	favoritesHint.TextSize = 10
 	favoritesHint.TextXAlignment = Enum.TextXAlignment.Left
 	favoritesHint.Position = UDim2.fromOffset(12, 29)
@@ -3948,7 +3940,7 @@ function Window:AddSpotifyPanel(opts)
 	local favoritesSearchIcon = Instance.new("ImageLabel")
 	favoritesSearchIcon.BackgroundTransparency = 1
 	favoritesSearchIcon.Image = ResolveIcon("search")
-	favoritesSearchIcon.ImageColor3 = NullUI.Theme.TextDim
+	favoritesSearchIcon.ImageColor3 = VVindUI.Theme.TextDim
 	favoritesSearchIcon.AnchorPoint = Vector2.new(0, 0.5)
 	favoritesSearchIcon.Position = UDim2.new(0, 11, 0.5, 0)
 	favoritesSearchIcon.Size = UDim2.fromOffset(15, 15)
@@ -3957,11 +3949,11 @@ function Window:AddSpotifyPanel(opts)
 	local favoritesSearchBox = Instance.new("TextBox")
 	favoritesSearchBox.BackgroundTransparency = 1
 	favoritesSearchBox.ClearTextOnFocus = false
-	favoritesSearchBox.FontFace = NullUI.Theme.FontRegular
+	favoritesSearchBox.FontFace = VVindUI.Theme.FontRegular
 	favoritesSearchBox.PlaceholderText = "Search favorite playlists..."
 	favoritesSearchBox.PlaceholderColor3 = Color3.fromRGB(115, 120, 118)
 	favoritesSearchBox.Text = ""
-	favoritesSearchBox.TextColor3 = NullUI.Theme.Text
+	favoritesSearchBox.TextColor3 = VVindUI.Theme.Text
 	favoritesSearchBox.TextSize = 11
 	favoritesSearchBox.TextXAlignment = Enum.TextXAlignment.Left
 	favoritesSearchBox.Position = UDim2.fromOffset(36, 0)
@@ -3983,7 +3975,7 @@ function Window:AddSpotifyPanel(opts)
 	local addFavoriteIcon = Instance.new("ImageLabel")
 	addFavoriteIcon.BackgroundTransparency = 1
 	addFavoriteIcon.Image = ResolveIcon("heart-plus")
-	addFavoriteIcon.ImageColor3 = NullUI.Theme.Text
+	addFavoriteIcon.ImageColor3 = VVindUI.Theme.Text
 	addFavoriteIcon.AnchorPoint = Vector2.new(0, 0.5)
 	addFavoriteIcon.Position = UDim2.new(0, 16, 0.5, 0)
 	addFavoriteIcon.Size = UDim2.fromOffset(17, 17)
@@ -3991,9 +3983,9 @@ function Window:AddSpotifyPanel(opts)
 	addFavoriteIcon.Parent = addFavoriteBtn
 	local saveFavoriteTitle = Instance.new("TextLabel")
 	saveFavoriteTitle.BackgroundTransparency = 1
-	saveFavoriteTitle.FontFace = NullUI.Theme.Font
+	saveFavoriteTitle.FontFace = VVindUI.Theme.Font
 	saveFavoriteTitle.Text = "Save current playlist"
-	saveFavoriteTitle.TextColor3 = NullUI.Theme.Text
+	saveFavoriteTitle.TextColor3 = VVindUI.Theme.Text
 	saveFavoriteTitle.TextSize = 12
 	saveFavoriteTitle.TextXAlignment = Enum.TextXAlignment.Left
 	saveFavoriteTitle.Position = UDim2.fromOffset(44, 7)
@@ -4002,9 +3994,9 @@ function Window:AddSpotifyPanel(opts)
 	saveFavoriteTitle.Parent = addFavoriteBtn
 	local saveFavoriteHint = Instance.new("TextLabel")
 	saveFavoriteHint.BackgroundTransparency = 1
-	saveFavoriteHint.FontFace = NullUI.Theme.FontRegular
+	saveFavoriteHint.FontFace = VVindUI.Theme.FontRegular
 	saveFavoriteHint.Text = "Add the playlist loaded in the player to Favorites"
-	saveFavoriteHint.TextColor3 = NullUI.Theme.TextDim
+	saveFavoriteHint.TextColor3 = VVindUI.Theme.TextDim
 	saveFavoriteHint.TextSize = 9
 	saveFavoriteHint.TextXAlignment = Enum.TextXAlignment.Left
 	saveFavoriteHint.Position = UDim2.fromOffset(44, 27)
@@ -4014,7 +4006,7 @@ function Window:AddSpotifyPanel(opts)
 	local saveFavoriteChevron = Instance.new("ImageLabel")
 	saveFavoriteChevron.BackgroundTransparency = 1
 	saveFavoriteChevron.Image = ResolveIcon("chevron-right")
-	saveFavoriteChevron.ImageColor3 = NullUI.Theme.TextDim
+	saveFavoriteChevron.ImageColor3 = VVindUI.Theme.TextDim
 	saveFavoriteChevron.AnchorPoint = Vector2.new(1, 0.5)
 	saveFavoriteChevron.Position = UDim2.new(1, -16, 0.5, 0)
 	saveFavoriteChevron.Size = UDim2.fromOffset(14, 14)
@@ -4041,14 +4033,12 @@ function Window:AddSpotifyPanel(opts)
 	local currentPlaylistName = "Spotify playlist"
 	local favoritesPath = ASSETS_FOLDER .. "/spotify-favorites.json"
 	if fn_readfile and fn_isfile then
-		for _, path in ipairs({ favoritesPath, LEGACY_ASSETS_FOLDER .. "/spotify-favorites.json" }) do
-			local existsOk, exists = pcall(fn_isfile, path)
-			if existsOk and exists then
-				local readOk, raw = pcall(fn_readfile, path)
-				if readOk then
-					local decodeOk, decoded = pcall(function() return HttpService:JSONDecode(raw) end)
-					if decodeOk and type(decoded) == "table" then favorites = decoded; break end
-				end
+		local existsOk, exists = pcall(fn_isfile, favoritesPath)
+		if existsOk and exists then
+			local readOk, raw = pcall(fn_readfile, favoritesPath)
+			if readOk then
+				local decodeOk, decoded = pcall(function() return HttpService:JSONDecode(raw) end)
+				if decodeOk and type(decoded) == "table" then favorites = decoded end
 			end
 		end
 	end
@@ -4080,7 +4070,7 @@ function Window:AddSpotifyPanel(opts)
 		local now = os.clock()
 		if notifyTimes[key] and now - notifyTimes[key] < 2.5 then return end
 		notifyTimes[key] = now
-		NullUI:Notify({
+		VVindUI:Notify({
 			Title = title,
 			Text = text,
 			Type = notifyType or "info",
@@ -4152,9 +4142,9 @@ function Window:AddSpotifyPanel(opts)
 		if count == 0 then
 			local empty = Instance.new("TextLabel")
 			empty.BackgroundTransparency = 1
-			empty.FontFace = NullUI.Theme.FontRegular
+			empty.FontFace = VVindUI.Theme.FontRegular
 			empty.Text = query ~= "" and "No saved playlist matches your search" or "No saved playlists yet"
-			empty.TextColor3 = NullUI.Theme.TextDim
+			empty.TextColor3 = VVindUI.Theme.TextDim
 			empty.TextSize = 11
 			empty.Size = UDim2.fromScale(1, 1)
 			empty.ZIndex = Z.Content + 3
@@ -4187,7 +4177,7 @@ function Window:AddSpotifyPanel(opts)
 			local playlistIcon = Instance.new("ImageLabel")
 			playlistIcon.BackgroundTransparency = 1
 			playlistIcon.Image = ResolveIcon("list-music")
-			playlistIcon.ImageColor3 = NullUI.Theme.Text
+			playlistIcon.ImageColor3 = VVindUI.Theme.Text
 			playlistIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 			playlistIcon.Position = UDim2.fromScale(0.5, 0.5)
 			playlistIcon.Size = UDim2.fromOffset(15, 15)
@@ -4195,9 +4185,9 @@ function Window:AddSpotifyPanel(opts)
 			playlistIcon.Parent = playlistIconBox
 			local name = Instance.new("TextLabel")
 			name.BackgroundTransparency = 1
-			name.FontFace = NullUI.Theme.Font
+			name.FontFace = VVindUI.Theme.Font
 			name.Text = tostring(favorite.name or "Spotify playlist")
-			name.TextColor3 = NullUI.Theme.Text
+			name.TextColor3 = VVindUI.Theme.Text
 			name.TextSize = 11
 			name.TextXAlignment = Enum.TextXAlignment.Left
 			name.TextTruncate = Enum.TextTruncate.AtEnd
@@ -4207,9 +4197,9 @@ function Window:AddSpotifyPanel(opts)
 			name.Parent = row
 			local subtitle = Instance.new("TextLabel")
 			subtitle.BackgroundTransparency = 1
-			subtitle.FontFace = NullUI.Theme.FontRegular
+			subtitle.FontFace = VVindUI.Theme.FontRegular
 			subtitle.Text = "Spotify playlist"
-			subtitle.TextColor3 = NullUI.Theme.TextDim
+			subtitle.TextColor3 = VVindUI.Theme.TextDim
 			subtitle.TextSize = 9
 			subtitle.TextXAlignment = Enum.TextXAlignment.Left
 			subtitle.Position = UDim2.fromOffset(60, 30)
@@ -4230,7 +4220,7 @@ function Window:AddSpotifyPanel(opts)
 			local loadFavoriteIcon = Instance.new("ImageLabel")
 			loadFavoriteIcon.BackgroundTransparency = 1
 			loadFavoriteIcon.Image = ResolveIcon("play")
-			loadFavoriteIcon.ImageColor3 = NullUI.Theme.Text
+			loadFavoriteIcon.ImageColor3 = VVindUI.Theme.Text
 			loadFavoriteIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 			loadFavoriteIcon.Position = UDim2.fromScale(0.5, 0.5)
 			loadFavoriteIcon.Size = UDim2.fromOffset(13, 13)
@@ -4296,8 +4286,8 @@ function Window:AddSpotifyPanel(opts)
  
 	local function paintModes()
 		controlRefs.PlayPause.Icon.Image = ResolveIcon(isPlaying and "pause" or "play")
-		controlRefs.Shuffle.Icon.ImageColor3 = shuffle and Color3.fromRGB(30, 215, 96) or NullUI.Theme.TextDim
-		controlRefs.Repeat.Icon.ImageColor3 = repeatMode ~= "off" and Color3.fromRGB(30, 215, 96) or NullUI.Theme.TextDim
+		controlRefs.Shuffle.Icon.ImageColor3 = shuffle and Color3.fromRGB(30, 215, 96) or VVindUI.Theme.TextDim
+		controlRefs.Repeat.Icon.ImageColor3 = repeatMode ~= "off" and Color3.fromRGB(30, 215, 96) or VVindUI.Theme.TextDim
 	end
  
 	local function applyState(data)
@@ -4437,7 +4427,7 @@ function Window:AddSpotifyPanel(opts)
 			bindSocketEvent(socket.OnClose, function()
 				disconnectBridge(false)
 			end)
-			send("hello", { client = "NullUI", protocol = 1 })
+			send("hello", { client = "VVindUI", protocol = 1 })
 		end)
 	end
  
@@ -4532,7 +4522,7 @@ function Window:_BuildDefaultChatTools()
 			Description = "Lists every UI element that has a Flag, with its kind and current value.",
 			Parameters = { type = "object", properties = {}, required = {} },
 			Handler = function()
-				return NullUI:ListUIElements()
+				return VVindUI:ListUIElements()
 			end,
 		},
 		{
@@ -4547,7 +4537,7 @@ function Window:_BuildDefaultChatTools()
 				required = { "flag", "value" },
 			},
 			Handler = function(args)
-				local ok, err = NullUI:SetUIElementValue(args.flag, args.value)
+				local ok, err = VVindUI:SetUIElementValue(args.flag, args.value)
 				if not ok then error(err, 0) end
 				return true
 			end,
@@ -4617,7 +4607,7 @@ function Window:_BuildDefaultSystemPrompt()
 		if not t.Hidden then table.insert(names, t.Name) end
 	end
  
-	return "You are a helpful assistant embedded in a Roblox UI panel built with NullUI. Your tools "
+	return "You are a helpful assistant embedded in a Roblox UI panel built with VVindUI. Your tools "
 		.. "only affect THIS PANEL -- they inspect/adjust the panel's own toggles/sliders/etc, switch "
 		.. "between its top-level tabs (" .. table.concat(names, ", ") .. "), switch to a specific "
 		.. "sub-tab within one of those, and jump to/highlight a specific UI element on the panel by "
@@ -4701,7 +4691,7 @@ function Window:AddChatPanel(opts)
 	local titleIcon = Instance.new("ImageLabel")
 	titleIcon.BackgroundTransparency = 1
 	titleIcon.Image = ResolveIcon(opts.Icon or "bot")
-	titleIcon.ImageColor3 = NullUI.Theme.Text
+	titleIcon.ImageColor3 = VVindUI.Theme.Text
 	titleIcon.Size = UDim2.fromOffset(14, 14)
 	titleIcon.LayoutOrder = 1
 	titleIcon.ZIndex = BASE_Z + 2
@@ -4709,9 +4699,9 @@ function Window:AddChatPanel(opts)
  
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.BackgroundTransparency = 1
-	titleLabel.FontFace = NullUI.Theme.Font
+	titleLabel.FontFace = VVindUI.Theme.Font
 	titleLabel.Text = opts.Title or "Assistant"
-	titleLabel.TextColor3 = NullUI.Theme.Text
+	titleLabel.TextColor3 = VVindUI.Theme.Text
 	titleLabel.TextSize = 14
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.AutomaticSize = Enum.AutomaticSize.X
@@ -4751,7 +4741,7 @@ function Window:AddChatPanel(opts)
 		local ic = Instance.new("ImageLabel")
 		ic.BackgroundTransparency = 1
 		ic.Image = ResolveIcon(icon)
-		ic.ImageColor3 = NullUI.Theme.TextDim
+		ic.ImageColor3 = VVindUI.Theme.TextDim
 		ic.Size = UDim2.fromOffset(13, 13)
 		ic.AnchorPoint = Vector2.new(0.5, 0.5)
 		ic.Position = UDim2.fromScale(0.5, 0.5)
@@ -4760,11 +4750,11 @@ function Window:AddChatPanel(opts)
  
 		jan:Add(btn.MouseEnter:Connect(function()
 			Tween(btn, { BackgroundTransparency = 0.9 }, 0.12)
-			Tween(ic, { ImageColor3 = NullUI.Theme.Text }, 0.12)
+			Tween(ic, { ImageColor3 = VVindUI.Theme.Text }, 0.12)
 		end))
 		jan:Add(btn.MouseLeave:Connect(function()
 			Tween(btn, { BackgroundTransparency = 1 }, 0.12)
-			Tween(ic, { ImageColor3 = NullUI.Theme.TextDim }, 0.12)
+			Tween(ic, { ImageColor3 = VVindUI.Theme.TextDim }, 0.12)
 		end))
  
 		return btn, ic
@@ -4817,11 +4807,11 @@ function Window:AddChatPanel(opts)
 	local inputBox = Instance.new("TextBox")
 	inputBox.BackgroundTransparency = 1
 	inputBox.ClearTextOnFocus = false
-	inputBox.FontFace = NullUI.Theme.FontRegular
+	inputBox.FontFace = VVindUI.Theme.FontRegular
 	inputBox.PlaceholderText = opts.Placeholder or "Ask me anything..."
 	inputBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 122)
 	inputBox.Text = ""
-	inputBox.TextColor3 = NullUI.Theme.Text
+	inputBox.TextColor3 = VVindUI.Theme.Text
 	inputBox.TextSize = 13
 	inputBox.TextXAlignment = Enum.TextXAlignment.Left
 	inputBox.TextYAlignment = Enum.TextYAlignment.Center
@@ -4831,7 +4821,7 @@ function Window:AddChatPanel(opts)
 	inputBox.Parent = pill
  
 	jan:Add(inputBox.Focused:Connect(function()
-		Tween(pillStroke, { Color = NullUI.Theme.Accent, Transparency = 0.3 }, 0.15)
+		Tween(pillStroke, { Color = VVindUI.Theme.Accent, Transparency = 0.3 }, 0.15)
 	end))
 	jan:Add(inputBox.FocusLost:Connect(function()
 		Tween(pillStroke, { Color = Color3.new(1, 1, 1), Transparency = 0.9 }, 0.15)
@@ -4854,7 +4844,7 @@ function Window:AddChatPanel(opts)
 	local sendIcon = Instance.new("ImageLabel")
 	sendIcon.BackgroundTransparency = 1
 	sendIcon.Image = ResolveIcon("send")
-	sendIcon.ImageColor3 = NullUI.Theme.Text
+	sendIcon.ImageColor3 = VVindUI.Theme.Text
 	sendIcon.Size = UDim2.fromOffset(14, 14)
 	sendIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 	sendIcon.Position = UDim2.fromScale(0.5, 0.5)
@@ -4943,7 +4933,7 @@ function Window:AddChatPanel(opts)
 		local avatarFinalTransparency = isUser and 0.85 or 0.82
 		local avatar = Instance.new("Frame")
 		avatar.Name = "Avatar"
-		avatar.BackgroundColor3 = isUser and Color3.new(1, 1, 1) or NullUI.Theme.Accent
+		avatar.BackgroundColor3 = isUser and Color3.new(1, 1, 1) or VVindUI.Theme.Accent
 		avatar.BackgroundTransparency = 1
 		avatar.BorderSizePixel = 0
 		avatar.Size = UDim2.fromOffset(AVATAR, AVATAR)
@@ -4980,7 +4970,7 @@ function Window:AddChatPanel(opts)
 			botIcon.BackgroundTransparency = 1
 			botIcon.ImageTransparency = 1
 			botIcon.Image = ResolveIcon("bot")
-			botIcon.ImageColor3 = NullUI.Theme.Accent
+			botIcon.ImageColor3 = VVindUI.Theme.Accent
 			botIcon.Size = UDim2.fromOffset(14, 14)
 			botIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 			botIcon.Position = UDim2.fromScale(0.5, 0.5)
@@ -5011,7 +5001,7 @@ function Window:AddChatPanel(opts)
 		local bubbleFinalTransparency = isUser and 0.72 or 0.9
 		local bubble = Instance.new("Frame")
 		bubble.Name = "Bubble"
-		bubble.BackgroundColor3 = isUser and NullUI.Theme.Accent or Color3.new(1, 1, 1)
+		bubble.BackgroundColor3 = isUser and VVindUI.Theme.Accent or Color3.new(1, 1, 1)
 		bubble.BackgroundTransparency = 1
 		bubble.BorderSizePixel = 0
 		bubble.AutomaticSize = Enum.AutomaticSize.Y
@@ -5049,7 +5039,7 @@ function Window:AddChatPanel(opts)
 			if seg.kind == "code" then
 				local card = Instance.new("Frame")
 				card.Name = "CodeBlock"
-				card.BackgroundColor3 = NullUI.Theme.Background
+				card.BackgroundColor3 = VVindUI.Theme.Background
 				card.BackgroundTransparency = 0.1
 				card.BorderSizePixel = 0
 				card.ClipsDescendants = true
@@ -5075,9 +5065,9 @@ function Window:AddChatPanel(opts)
  
 				local langLabel = Instance.new("TextLabel")
 				langLabel.BackgroundTransparency = 1
-				langLabel.FontFace = NullUI.Theme.FontRegular
+				langLabel.FontFace = VVindUI.Theme.FontRegular
 				langLabel.Text = seg.lang
-				langLabel.TextColor3 = NullUI.Theme.TextDim
+				langLabel.TextColor3 = VVindUI.Theme.TextDim
 				langLabel.TextSize = 11
 				langLabel.TextXAlignment = Enum.TextXAlignment.Left
 				langLabel.Position = UDim2.fromOffset(10, 0)
@@ -5102,7 +5092,7 @@ function Window:AddChatPanel(opts)
 					local ic = Instance.new("ImageLabel")
 					ic.BackgroundTransparency = 1
 					ic.Image = ResolveIcon(icon)
-					ic.ImageColor3 = NullUI.Theme.TextDim
+					ic.ImageColor3 = VVindUI.Theme.TextDim
 					ic.Size = UDim2.fromOffset(12, 12)
 					ic.AnchorPoint = Vector2.new(0.5, 0.5)
 					ic.Position = UDim2.fromScale(0.5, 0.5)
@@ -5111,11 +5101,11 @@ function Window:AddChatPanel(opts)
  
 					jan:Add(btn.MouseEnter:Connect(function()
 						Tween(btn, { BackgroundTransparency = 0.85 }, 0.12)
-						Tween(ic, { ImageColor3 = NullUI.Theme.Text }, 0.12)
+						Tween(ic, { ImageColor3 = VVindUI.Theme.Text }, 0.12)
 					end))
 					jan:Add(btn.MouseLeave:Connect(function()
 						Tween(btn, { BackgroundTransparency = 1 }, 0.12)
-						Tween(ic, { ImageColor3 = NullUI.Theme.TextDim }, 0.12)
+						Tween(ic, { ImageColor3 = VVindUI.Theme.TextDim }, 0.12)
 					end))
  
 					return btn, ic
@@ -5129,7 +5119,7 @@ function Window:AddChatPanel(opts)
 					Tween(copyIcon, { ImageColor3 = Color3.fromRGB(120, 220, 140) }, 0.1)
 					task.delay(0.4, function()
 						if copyIcon.Parent then
-							Tween(copyIcon, { ImageColor3 = NullUI.Theme.TextDim }, 0.15)
+							Tween(copyIcon, { ImageColor3 = VVindUI.Theme.TextDim }, 0.15)
 						end
 					end)
 				end))
@@ -5137,7 +5127,7 @@ function Window:AddChatPanel(opts)
 				if opts.OnRunCode then
 					local runBtn, runIcon = codeHeaderButton("play", 32)
 					jan:Add(runBtn.MouseButton1Click:Connect(function()
-						NullUI:Confirm({
+						VVindUI:Confirm({
 							Title = "Run this code?",
 							Text = "This runs exactly what's shown above, right now, in this game.",
 							ConfirmText = "Run",
@@ -5147,7 +5137,7 @@ function Window:AddChatPanel(opts)
 							Callback = function(confirmed)
 								if not confirmed then return end
 								local ok, err = pcall(opts.OnRunCode, seg.content, seg.lang)
-								NullUI:Notify({
+								VVindUI:Notify({
 									Title = ok and "Ran" or "Run failed",
 									Text = ok and "Code executed." or tostring(err),
 									Type = ok and "success" or "error",
@@ -5187,7 +5177,7 @@ function Window:AddChatPanel(opts)
 				codeLabel.FontFace = Font.new(CHAT_CODE_FONT, Enum.FontWeight.Regular, Enum.FontStyle.Normal)
 				codeLabel.RichText = true
 				codeLabel.Text = HighlightLua(EscapeRichText(seg.content))
-				codeLabel.TextColor3 = NullUI.Theme.Text
+				codeLabel.TextColor3 = VVindUI.Theme.Text
 				codeLabel.TextSize = 12
 				codeLabel.TextWrapped = true
 				codeLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -5201,10 +5191,10 @@ function Window:AddChatPanel(opts)
 				local label = Instance.new("TextLabel")
 				label.Name = "Prose"
 				label.BackgroundTransparency = 1
-				label.FontFace = NullUI.Theme.FontRegular
+				label.FontFace = VVindUI.Theme.FontRegular
 				label.RichText = true
 				label.Text = MarkdownToRichText(seg.content)
-				label.TextColor3 = NullUI.Theme.Text
+				label.TextColor3 = VVindUI.Theme.Text
 				label.TextTransparency = 1
 				label.TextSize = 13
 				label.TextWrapped = true
@@ -5264,7 +5254,7 @@ function Window:AddChatPanel(opts)
 		local toolIcon = Instance.new("ImageLabel")
 		toolIcon.BackgroundTransparency = 1
 		toolIcon.Image = ResolveIcon("wrench")
-		toolIcon.ImageColor3 = NullUI.Theme.Accent
+		toolIcon.ImageColor3 = VVindUI.Theme.Accent
 		toolIcon.Size = UDim2.fromOffset(11, 11)
 		toolIcon.LayoutOrder = 1
 		toolIcon.ZIndex = BASE_Z + 2
@@ -5272,9 +5262,9 @@ function Window:AddChatPanel(opts)
  
 		local label = Instance.new("TextLabel")
 		label.BackgroundTransparency = 1
-		label.FontFace = NullUI.Theme.FontRegular
+		label.FontFace = VVindUI.Theme.FontRegular
 		label.Text = "Called tool: " .. tostring(name)
-		label.TextColor3 = NullUI.Theme.TextDim
+		label.TextColor3 = VVindUI.Theme.TextDim
 		label.TextSize = 11
 		label.AutomaticSize = Enum.AutomaticSize.XY
 		label.Size = UDim2.fromOffset(0, 14)
@@ -5316,7 +5306,7 @@ function Window:AddChatPanel(opts)
 		rowLayout.Parent = row
  
 		local avatar = Instance.new("Frame")
-		avatar.BackgroundColor3 = NullUI.Theme.Accent
+		avatar.BackgroundColor3 = VVindUI.Theme.Accent
 		avatar.BackgroundTransparency = 1
 		avatar.BorderSizePixel = 0
 		avatar.Size = UDim2.fromOffset(AVATAR, AVATAR)
@@ -5329,7 +5319,7 @@ function Window:AddChatPanel(opts)
 		botIcon.BackgroundTransparency = 1
 		botIcon.ImageTransparency = 1
 		botIcon.Image = ResolveIcon("bot")
-		botIcon.ImageColor3 = NullUI.Theme.Accent
+		botIcon.ImageColor3 = VVindUI.Theme.Accent
 		botIcon.Size = UDim2.fromOffset(14, 14)
 		botIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 		botIcon.Position = UDim2.fromScale(0.5, 0.5)
@@ -5351,7 +5341,7 @@ function Window:AddChatPanel(opts)
 		for i = 1, 3 do
 			local baseX = 10 + (i - 1) * 9
 			local dot = Instance.new("Frame")
-			dot.BackgroundColor3 = NullUI.Theme.TextDim
+			dot.BackgroundColor3 = VVindUI.Theme.TextDim
 			dot.BackgroundTransparency = 1
 			dot.BorderSizePixel = 0
 			dot.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -5528,7 +5518,7 @@ function Window:AddChatPanel(opts)
 		Tween(copyIcon, { ImageColor3 = Color3.fromRGB(120, 220, 140) }, 0.1)
 		task.delay(0.4, function()
 			if copyIcon.Parent then
-				Tween(copyIcon, { ImageColor3 = NullUI.Theme.TextDim }, 0.15)
+				Tween(copyIcon, { ImageColor3 = VVindUI.Theme.TextDim }, 0.15)
 			end
 		end)
 	end))
@@ -5605,7 +5595,7 @@ function Window:AddCloudPanel(opts)
 		Description = "Stays on this device only",
 		Icon = "Lucide:save",
 		Callback = function()
-			NullUI:Modal({
+			VVindUI:Modal({
 				Title = "Save Config Locally",
 				Text  = "Stays only on this device -- never sent anywhere.",
 				ConfirmText = "Save",
@@ -5619,19 +5609,19 @@ function Window:AddCloudPanel(opts)
 				Callback = function(confirmed, values)
 					if not confirmed then return end
 					if not values.Name or values.Name:gsub("%s+", "") == "" then
-						NullUI:Notify({ Title = "Local Save", Text = "Name can't be empty.", Type = "warning", Duration = 3 })
+						VVindUI:Notify({ Title = "Local Save", Text = "Name can't be empty.", Type = "warning", Duration = 3 })
 						return
 					end
 					local function saveNow()
-						local ok, err = NullUI:SaveConfig(values.Name, { Description = values.Description })
-						NullUI:Notify({
+						local ok, err = VVindUI:SaveConfig(values.Name, { Description = values.Description })
+						VVindUI:Notify({
 							Title = ok and "Saved" or "Could not save", Text = ok and "Saved locally." or tostring(err),
 							Type = ok and "success" or "error", Duration = 3,
 						})
 						if ok and localGrid then localGrid.Refresh() end
 					end
-					if NullUI:GetConfigMeta(values.Name) then
-						NullUI:Confirm({
+					if VVindUI:GetConfigMeta(values.Name) then
+						VVindUI:Confirm({
 							Title = "Overwrite \"" .. tostring(values.Name) .. "\"?",
 							Text = "A local config already uses this name.", ConfirmText = "Overwrite", CancelText = "Cancel",
 							Danger = true, Window = self,
@@ -5662,7 +5652,7 @@ function Window:AddCloudPanel(opts)
 		EmptyText = "No local configs saved yet.",
 		ErrorText = "Your executor doesn't support local file access.",
 		Fetch = function(state)
-			local items, err = NullUI:ListConfigs()
+			local items, err = VVindUI:ListConfigs()
 			if err and #items == 0 then return nil, err end
 			local query = string.lower(tostring(state and state.Query or ""))
 			local out = {}
@@ -5675,28 +5665,28 @@ function Window:AddCloudPanel(opts)
 				if query ~= "" and not string.find(searchable, query, 1, true) then continue end
  
 				local function loadLocalConfig()
-					NullUI:Confirm({
+					VVindUI:Confirm({
 						Title = "Load \"" .. tostring(cfg.Name) .. "\"?",
 						Text = "This overwrites your current settings. A snapshot is kept for instant undo.",
 						ConfirmText = "Load", CancelText = "Cancel", Window = self,
 						Callback = function(confirmedLoad)
 							if not confirmedLoad then return end
-							local snapshot = NullUI:CreateSnapshot()
-							local ok, loadErr = NullUI:LoadConfig(cfg.Name, false)
+							local snapshot = VVindUI:CreateSnapshot()
+							local ok, loadErr = VVindUI:LoadConfig(cfg.Name, false)
 							if not ok then
-								NullUI:Notify({ Title = "Could not load", Text = tostring(loadErr), Type = "error", Duration = 4 })
+								VVindUI:Notify({ Title = "Could not load", Text = tostring(loadErr), Type = "error", Duration = 4 })
 								return
 							end
-							NullUI:Notify({
+							VVindUI:Notify({
 								Title = "Loaded", Text = tostring(cfg.Name) .. " is now active.", Type = "success", Duration = 6,
-								Actions = {{ Text = "Undo", Callback = function() NullUI:RestoreSnapshot(snapshot, false) end }},
+								Actions = {{ Text = "Undo", Callback = function() VVindUI:RestoreSnapshot(snapshot, false) end }},
 							})
 						end,
 					})
 				end
  
 				local function renameLocalConfig()
-					NullUI:Modal({
+					VVindUI:Modal({
 						Title = "Rename Config", Text = "Choose a new name for \"" .. tostring(cfg.Name) .. "\".",
 						ConfirmText = "Rename", CancelText = "Cancel", Window = self,
 						Fields = {{ Key = "Name", Label = "New name", Default = cfg.Name, MaxLength = 60 }},
@@ -5704,13 +5694,13 @@ function Window:AddCloudPanel(opts)
 							if not confirmed then return end
 							local newName = tostring(values.Name or ""):match("^%s*(.-)%s*$")
 							if newName == "" then return end
-							local existing = NullUI:GetConfigMeta(newName)
+							local existing = VVindUI:GetConfigMeta(newName)
 							if existing and newName ~= cfg.Name then
-								NullUI:Notify({ Title = "Name already used", Text = "Choose another config name.", Type = "warning", Duration = 3 })
+								VVindUI:Notify({ Title = "Name already used", Text = "Choose another config name.", Type = "warning", Duration = 3 })
 								return
 							end
-							local ok, renameErr = NullUI:RenameConfig(cfg.Name, newName)
-							NullUI:Notify({ Title = ok and "Renamed" or "Could not rename", Text = ok and "Config name updated." or tostring(renameErr), Type = ok and "success" or "error", Duration = 3 })
+							local ok, renameErr = VVindUI:RenameConfig(cfg.Name, newName)
+							VVindUI:Notify({ Title = ok and "Renamed" or "Could not rename", Text = ok and "Config name updated." or tostring(renameErr), Type = ok and "success" or "error", Duration = 3 })
 							if ok and localGrid then localGrid.Refresh() end
 						end,
 					})
@@ -5718,16 +5708,16 @@ function Window:AddCloudPanel(opts)
  
 				local function publishLocalConfig()
 					if not service then
-						NullUI:Notify({ Title = "Cloud", Text = "No cloud service configured.", Type = "warning", Duration = 3 })
+						VVindUI:Notify({ Title = "Cloud", Text = "No cloud service configured.", Type = "warning", Duration = 3 })
 						return
 					end
-					local saved, savedErr = NullUI:GetSavedConfig(cfg.Name)
+					local saved, savedErr = VVindUI:GetSavedConfig(cfg.Name)
 					if not saved then
-						NullUI:Notify({ Title = "Could not read config", Text = tostring(savedErr), Type = "error", Duration = 3 })
+						VVindUI:Notify({ Title = "Could not read config", Text = tostring(savedErr), Type = "error", Duration = 3 })
 						return
 					end
 					local result, publishErr = service:Publish({ Name = cfg.Name, Description = cfg.Description, Tags = cfg.Tags }, saved.Data)
-					NullUI:Notify({ Title = result and "Published" or "Could not publish", Text = result and "Config published successfully." or tostring(publishErr), Type = result and "success" or "error", Duration = 4 })
+					VVindUI:Notify({ Title = result and "Published" or "Could not publish", Text = result and "Config published successfully." or tostring(publishErr), Type = result and "success" or "error", Duration = 4 })
 					if result then
 						if mineGrid then mineGrid.Refresh() end
 						if publicGrid then publicGrid.Refresh() end
@@ -5735,13 +5725,13 @@ function Window:AddCloudPanel(opts)
 				end
  
 				local function deleteLocalConfig()
-					NullUI:Confirm({
+					VVindUI:Confirm({
 						Title = "Delete \"" .. tostring(cfg.Name) .. "\"?", Text = "This local config will be permanently removed.",
 						ConfirmText = "Delete", CancelText = "Cancel", Danger = true, Window = self,
 						Callback = function(confirmed)
 							if not confirmed then return end
-							local ok, deleteErr = NullUI:DeleteConfig(cfg.Name)
-							NullUI:Notify({ Title = ok and "Deleted" or "Could not delete", Text = ok and "Config removed." or tostring(deleteErr), Type = ok and "success" or "error", Duration = 3 })
+							local ok, deleteErr = VVindUI:DeleteConfig(cfg.Name)
+							VVindUI:Notify({ Title = ok and "Deleted" or "Could not delete", Text = ok and "Config removed." or tostring(deleteErr), Type = ok and "success" or "error", Duration = 3 })
 							if ok and localGrid then localGrid.Refresh() end
 						end,
 					})
@@ -5766,10 +5756,10 @@ function Window:AddCloudPanel(opts)
  
 	local function publishFlow()
 		if not service then
-			NullUI:Notify({ Title = "Cloud", Text = "No cloud service configured.", Type = "warning", Duration = 3 })
+			VVindUI:Notify({ Title = "Cloud", Text = "No cloud service configured.", Type = "warning", Duration = 3 })
 			return
 		end
-		NullUI:Modal({
+		VVindUI:Modal({
 			Title = "New Config",
 			ConfirmText = "Publish",
 			CancelText = "Cancel",
@@ -5788,7 +5778,7 @@ function Window:AddCloudPanel(opts)
 					Description = values.Description,
 					Tags = values.Tags,
 				})
-				NullUI:Notify({
+				VVindUI:Notify({
 					Title = result and "Published" or "Could not publish",
 					Text  = result and "Your config is now public." or tostring(err),
 					Type  = result and "success" or "error",
@@ -5841,14 +5831,14 @@ function Window:AddCloudPanel(opts)
 			local out = {}
 			for _, cfg in ipairs(items) do
 				local function deletePublishedConfig()
-					NullUI:Confirm({
+					VVindUI:Confirm({
 						Title = "Delete \"" .. tostring(cfg.Name) .. "\"?",
 						Text = "This removes it from the public library. This cannot be undone.",
 						ConfirmText = "Delete", CancelText = "Cancel", Danger = true, Window = self,
 						Callback = function(confirmedDelete)
 							if not confirmedDelete then return end
 							local ok, delErr = service:Delete(cfg.Id)
-							NullUI:Notify({ Title = ok and "Deleted" or "Could not delete", Text = ok and "Config removed." or tostring(delErr), Type = ok and "success" or "error", Duration = 3 })
+							VVindUI:Notify({ Title = ok and "Deleted" or "Could not delete", Text = ok and "Config removed." or tostring(delErr), Type = ok and "success" or "error", Duration = 3 })
 							if ok then
 								if mineGrid then mineGrid.Refresh() end
 								if publicGrid then publicGrid.Refresh() end
@@ -5926,7 +5916,7 @@ function Window:AddCloudPanel(opts)
 							Callback = function()
 								local liked, likeErr = service:Like(cfg.Id)
 								if not liked then
-									NullUI:Notify({
+									VVindUI:Notify({
 										Title = "Could not like",
 										Text  = tostring(likeErr),
 										Type  = "error",
@@ -5940,7 +5930,7 @@ function Window:AddCloudPanel(opts)
 						{ Icon = "download", Text = tostring(cfg.Downloads or 0) },
 					},
 					Callback = function()
-						NullUI:Confirm({
+						VVindUI:Confirm({
 							Title = "Apply \"" .. tostring(cfg.Name) .. "\"?",
 							Text  = "This overwrites your current settings. A snapshot of what you have now "
 								.. "is kept so you can undo it right after.",
@@ -5951,7 +5941,7 @@ function Window:AddCloudPanel(opts)
 								if not confirmedApply then return end
 								local result, dlErr = service:Download(cfg.Id)
 								if not result or not result.Data then
-									NullUI:Notify({
+									VVindUI:Notify({
 										Title = "Could not apply",
 										Text  = tostring(dlErr),
 										Type  = "error",
@@ -5960,10 +5950,10 @@ function Window:AddCloudPanel(opts)
 									return
 								end
  
-								local snapshot = NullUI:CreateSnapshot()
-								local applied, applyErr = NullUI:SetConfig(result.Data, false)
+								local snapshot = VVindUI:CreateSnapshot()
+								local applied, applyErr = VVindUI:SetConfig(result.Data, false)
 								if not applied then
-									NullUI:Notify({
+									VVindUI:Notify({
 										Title = "Could not apply",
 										Text = tostring(applyErr),
 										Type = "error",
@@ -5971,7 +5961,7 @@ function Window:AddCloudPanel(opts)
 									})
 									return
 								end
-								NullUI:Notify({
+								VVindUI:Notify({
 									Title = "Applied",
 									Text  = tostring(cfg.Name) .. " is now active.",
 									Type  = "success",
@@ -5980,8 +5970,8 @@ function Window:AddCloudPanel(opts)
 										{
 											Text = "Undo",
 											Callback = function()
-												NullUI:RestoreSnapshot(snapshot, false)
-												NullUI:Notify({
+												VVindUI:RestoreSnapshot(snapshot, false)
+												VVindUI:Notify({
 													Title = "Reverted",
 													Text  = "Your previous settings are back.",
 													Type  = "info",
@@ -6098,7 +6088,7 @@ function Window:AddGlobalChatPanel(opts)
 	local titleIcon = Instance.new("ImageLabel")
 	titleIcon.BackgroundTransparency = 1
 	titleIcon.Image = ResolveIcon(opts.Icon or "messages-square")
-	titleIcon.ImageColor3 = NullUI.Theme.Text
+	titleIcon.ImageColor3 = VVindUI.Theme.Text
 	titleIcon.Size = UDim2.fromOffset(14, 14)
 	titleIcon.LayoutOrder = 1
 	titleIcon.ZIndex = BASE_Z + 2
@@ -6106,9 +6096,9 @@ function Window:AddGlobalChatPanel(opts)
  
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.BackgroundTransparency = 1
-	titleLabel.FontFace = NullUI.Theme.Font
+	titleLabel.FontFace = VVindUI.Theme.Font
 	titleLabel.Text = opts.Title or "Chat"
-	titleLabel.TextColor3 = NullUI.Theme.Text
+	titleLabel.TextColor3 = VVindUI.Theme.Text
 	titleLabel.TextSize = 14
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.AutomaticSize = Enum.AutomaticSize.X
@@ -6148,7 +6138,7 @@ function Window:AddGlobalChatPanel(opts)
 		local ic = Instance.new("ImageLabel")
 		ic.BackgroundTransparency = 1
 		ic.Image = ResolveIcon(icon)
-		ic.ImageColor3 = NullUI.Theme.TextDim
+		ic.ImageColor3 = VVindUI.Theme.TextDim
 		ic.Size = UDim2.fromOffset(13, 13)
 		ic.AnchorPoint = Vector2.new(0.5, 0.5)
 		ic.Position = UDim2.fromScale(0.5, 0.5)
@@ -6157,11 +6147,11 @@ function Window:AddGlobalChatPanel(opts)
  
 		jan:Add(btn.MouseEnter:Connect(function()
 			Tween(btn, { BackgroundTransparency = 0.9 }, 0.12)
-			Tween(ic, { ImageColor3 = NullUI.Theme.Text }, 0.12)
+			Tween(ic, { ImageColor3 = VVindUI.Theme.Text }, 0.12)
 		end))
 		jan:Add(btn.MouseLeave:Connect(function()
 			Tween(btn, { BackgroundTransparency = 1 }, 0.12)
-			Tween(ic, { ImageColor3 = NullUI.Theme.TextDim }, 0.12)
+			Tween(ic, { ImageColor3 = VVindUI.Theme.TextDim }, 0.12)
 		end))
  
 		return btn, ic
@@ -6220,11 +6210,11 @@ function Window:AddGlobalChatPanel(opts)
 	local inputBox = Instance.new("TextBox")
 	inputBox.BackgroundTransparency = 1
 	inputBox.ClearTextOnFocus = false
-	inputBox.FontFace = NullUI.Theme.FontRegular
+	inputBox.FontFace = VVindUI.Theme.FontRegular
 	inputBox.PlaceholderText = opts.Placeholder or "Message everyone using this script..."
 	inputBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 122)
 	inputBox.Text = ""
-	inputBox.TextColor3 = NullUI.Theme.Text
+	inputBox.TextColor3 = VVindUI.Theme.Text
 	inputBox.TextSize = 13
 	inputBox.TextXAlignment = Enum.TextXAlignment.Left
 	inputBox.TextYAlignment = Enum.TextYAlignment.Center
@@ -6234,7 +6224,7 @@ function Window:AddGlobalChatPanel(opts)
 	inputBox.Parent = pill
  
 	jan:Add(inputBox.Focused:Connect(function()
-		Tween(pillStroke, { Color = NullUI.Theme.Accent, Transparency = 0.3 }, 0.15)
+		Tween(pillStroke, { Color = VVindUI.Theme.Accent, Transparency = 0.3 }, 0.15)
 	end))
 	jan:Add(inputBox.FocusLost:Connect(function()
 		Tween(pillStroke, { Color = Color3.new(1, 1, 1), Transparency = 0.9 }, 0.15)
@@ -6256,7 +6246,7 @@ function Window:AddGlobalChatPanel(opts)
 	local sendIcon = Instance.new("ImageLabel")
 	sendIcon.BackgroundTransparency = 1
 	sendIcon.Image = ResolveIcon("send")
-	sendIcon.ImageColor3 = NullUI.Theme.Text
+	sendIcon.ImageColor3 = VVindUI.Theme.Text
 	sendIcon.Size = UDim2.fromOffset(14, 14)
 	sendIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 	sendIcon.Position = UDim2.fromScale(0.5, 0.5)
@@ -6346,7 +6336,7 @@ function Window:AddGlobalChatPanel(opts)
 		local avatar = Instance.new("Frame")
 		avatar.Name = "Avatar"
  
-		avatar.BackgroundColor3 = isAnon and Color3.fromRGB(196, 143, 105) or NullUI.Theme.Accent
+		avatar.BackgroundColor3 = isAnon and Color3.fromRGB(196, 143, 105) or VVindUI.Theme.Accent
 		avatar.BackgroundTransparency = 1
 		avatar.BorderSizePixel = 0
 		avatar.Size = UDim2.fromOffset(AVATAR, AVATAR)
@@ -6404,7 +6394,7 @@ function Window:AddGlobalChatPanel(opts)
  
 		local bubble = Instance.new("Frame")
 		bubble.Name = "Bubble"
-		bubble.BackgroundColor3 = isOwn and NullUI.Theme.Accent or Color3.new(1, 1, 1)
+		bubble.BackgroundColor3 = isOwn and VVindUI.Theme.Accent or Color3.new(1, 1, 1)
 		bubble.BackgroundTransparency = 1
 		bubble.BorderSizePixel = 0
 		bubble.ClipsDescendants = true
@@ -6429,9 +6419,9 @@ function Window:AddGlobalChatPanel(opts)
  
 		local label = Instance.new("TextLabel")
 		label.BackgroundTransparency = 1
-		label.FontFace = NullUI.Theme.FontRegular
+		label.FontFace = VVindUI.Theme.FontRegular
 		label.Text = text
-		label.TextColor3 = NullUI.Theme.Text
+		label.TextColor3 = VVindUI.Theme.Text
 		label.TextTransparency = 1
 		label.TextSize = 13
 		label.TextWrapped = true
@@ -6447,9 +6437,9 @@ function Window:AddGlobalChatPanel(opts)
 		if msg.CreatedAt then
 			local timeLbl = Instance.new("TextLabel")
 			timeLbl.BackgroundTransparency = 1
-			timeLbl.FontFace = NullUI.Theme.FontRegular
+			timeLbl.FontFace = VVindUI.Theme.FontRegular
 			timeLbl.Text = os.date("%H:%M", math.floor(msg.CreatedAt / 1000))
-			timeLbl.TextColor3 = isOwn and Color3.new(1, 1, 1) or NullUI.Theme.TextDim
+			timeLbl.TextColor3 = isOwn and Color3.new(1, 1, 1) or VVindUI.Theme.TextDim
 			timeLbl.TextTransparency = isOwn and 0.5 or 0.4
 			timeLbl.TextSize = 10
 			timeLbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -6480,7 +6470,7 @@ function Window:AddGlobalChatPanel(opts)
 			reportIcon.BackgroundTransparency = 1
 			reportIcon.ImageTransparency = 1
 			reportIcon.Image = ResolveIcon("flag")
-			reportIcon.ImageColor3 = NullUI.Theme.TextDim
+			reportIcon.ImageColor3 = VVindUI.Theme.TextDim
 			reportIcon.Size = UDim2.fromOffset(11, 11)
 			reportIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 			reportIcon.Position = UDim2.fromScale(0.5, 0.5)
@@ -6495,14 +6485,14 @@ function Window:AddGlobalChatPanel(opts)
 			end))
 			jan:Add(reportBtn.MouseEnter:Connect(function()
 				Tween(reportBtn, { BackgroundTransparency = 0.88 }, 0.1)
-				Tween(reportIcon, { ImageColor3 = NullUI.Theme.Danger, ImageTransparency = 0 }, 0.1)
+				Tween(reportIcon, { ImageColor3 = VVindUI.Theme.Danger, ImageTransparency = 0 }, 0.1)
 			end))
 			jan:Add(reportBtn.MouseLeave:Connect(function()
 				Tween(reportBtn, { BackgroundTransparency = 1 }, 0.1)
-				Tween(reportIcon, { ImageColor3 = NullUI.Theme.TextDim }, 0.1)
+				Tween(reportIcon, { ImageColor3 = VVindUI.Theme.TextDim }, 0.1)
 			end))
 			jan:Add(reportBtn.MouseButton1Click:Connect(function()
-				NullUI:Confirm({
+				VVindUI:Confirm({
 					Title = "Report this message?",
 					Text  = "Hides it for everyone once enough people report it.",
 					ConfirmText = "Report",
@@ -6512,7 +6502,7 @@ function Window:AddGlobalChatPanel(opts)
 					Callback = function(confirmed)
 						if not confirmed then return end
 						local ok, err = service:ReportChatMessage(msg.Id)
-						NullUI:Notify({
+						VVindUI:Notify({
 							Title = ok and "Reported" or "Could not report",
 							Text  = ok and "Thanks -- our filters will take it from here." or tostring(err),
 							Type  = ok and "success" or "error",
@@ -6543,7 +6533,7 @@ function Window:AddGlobalChatPanel(opts)
 		Tween(copyIcon, { ImageColor3 = Color3.fromRGB(120, 220, 140) }, 0.1)
 		task.delay(0.4, function()
 			if copyIcon.Parent then
-				Tween(copyIcon, { ImageColor3 = NullUI.Theme.TextDim }, 0.15)
+				Tween(copyIcon, { ImageColor3 = VVindUI.Theme.TextDim }, 0.15)
 			end
 		end)
 	end))
@@ -6559,7 +6549,7 @@ function Window:AddGlobalChatPanel(opts)
 		task.spawn(function()
 			local result, err = service:SendChatMessage(sendUserId, text)
 			if not result then
-				NullUI:Notify({ Title = "Chat", Text = tostring(err), Type = "error", Duration = 3 })
+				VVindUI:Notify({ Title = "Chat", Text = tostring(err), Type = "error", Duration = 3 })
 				return
 			end
 			seenIds[result.Id] = true
@@ -6575,7 +6565,7 @@ function Window:AddGlobalChatPanel(opts)
 	jan:Add(anonBtn.MouseButton1Click:Connect(function()
 		anonymousMode = not anonymousMode
 		anonIcon.Image = ResolveIcon(anonymousMode and "eye-off" or "eye")
-		NullUI:Notify({
+		VVindUI:Notify({
 			Title = "Chat",
 			Text  = anonymousMode
 				and "Anonymous mode on -- new messages won't reveal your avatar."
@@ -6611,7 +6601,7 @@ function Window:AddGlobalChatPanel(opts)
  
 		local popup = Instance.new("Frame")
 		popup.Name = "ChatSettingsPopup"
-		popup.BackgroundColor3 = NullUI.Theme.Surface
+		popup.BackgroundColor3 = VVindUI.Theme.Surface
 		popup.BackgroundTransparency = 0.05
 		popup.BorderSizePixel = 0
 		popup.AnchorPoint = Vector2.new(1, 0)
@@ -6646,9 +6636,9 @@ function Window:AddGlobalChatPanel(opts)
  
 			local lbl = Instance.new("TextLabel")
 			lbl.BackgroundTransparency = 1
-			lbl.FontFace = NullUI.Theme.FontRegular
+			lbl.FontFace = VVindUI.Theme.FontRegular
 			lbl.Text = label
-			lbl.TextColor3 = NullUI.Theme.Text
+			lbl.TextColor3 = VVindUI.Theme.Text
 			lbl.TextSize = 12
 			lbl.TextXAlignment = Enum.TextXAlignment.Left
 			lbl.Size = UDim2.new(1, -30, 1, 0)
@@ -6671,7 +6661,7 @@ function Window:AddGlobalChatPanel(opts)
 			local checkIcon = Instance.new("ImageLabel")
 			checkIcon.BackgroundTransparency = 1
 			checkIcon.Image = ResolveIcon("check")
-			checkIcon.ImageColor3 = NullUI.Theme.Accent
+			checkIcon.ImageColor3 = VVindUI.Theme.Accent
 			checkIcon.ImageTransparency = getValue() and 0 or 1
 			checkIcon.Size = UDim2.fromOffset(11, 11)
 			checkIcon.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -6810,7 +6800,7 @@ function Window:AddTab(nameOrOpts)
 	local isPrivate = opts.Password ~= nil and opts.Password ~= ""
 	local remembered = isPrivate and IsPrivateTabRemembered(name)
 	local unlocked = not isPrivate or remembered
-	local glowColor = opts.GlowColor or NullUI.Theme.Accent
+	local glowColor = opts.GlowColor or VVindUI.Theme.Accent
 	local glowStroke, lockBadge, glowPulse
  
 	if isPrivate then
@@ -6829,7 +6819,7 @@ function Window:AddTab(nameOrOpts)
 	if isPrivate and not remembered then
 		lockBadge = Instance.new("Frame")
 		lockBadge.Name = "LockBadge"
-		lockBadge.BackgroundColor3 = NullUI.Theme.Background
+		lockBadge.BackgroundColor3 = VVindUI.Theme.Background
 		lockBadge.BackgroundTransparency = 0
 		lockBadge.BorderSizePixel = 0
 		lockBadge.Size = UDim2.fromOffset(13, 13)
@@ -6876,7 +6866,7 @@ function Window:AddTab(nameOrOpts)
 		iconLabel.Name = "Icon"
 		iconLabel.BackgroundTransparency = 1
 		iconLabel.Image = iconAsset
-		iconLabel.ImageColor3 = NullUI.Theme.TextDim
+		iconLabel.ImageColor3 = VVindUI.Theme.TextDim
 		iconLabel.Size = UDim2.fromOffset(16, 16)
 		iconLabel.LayoutOrder = 1
 		iconLabel.ZIndex = Z.Content + 1
@@ -6886,9 +6876,9 @@ function Window:AddTab(nameOrOpts)
 	local textLabel = Instance.new("TextLabel")
 	textLabel.Name = "Label"
 	textLabel.BackgroundTransparency = 1
-	textLabel.FontFace = NullUI.Theme.Font
+	textLabel.FontFace = VVindUI.Theme.Font
 	textLabel.Text = name
-	textLabel.TextColor3 = NullUI.Theme.TextDim
+	textLabel.TextColor3 = VVindUI.Theme.TextDim
 	textLabel.TextSize = 14
 	textLabel.TextXAlignment = Enum.TextXAlignment.Left
 	textLabel.TextTruncate = Enum.TextTruncate.AtEnd
@@ -6972,9 +6962,9 @@ function Window:AddTab(nameOrOpts)
  
 		for _, t in pairs(self._tabs) do
 			local isSelected = (t == tabObj)
-			Tween(t._label, { TextColor3 = isSelected and NullUI.Theme.Text or NullUI.Theme.TextDim }, 0.22)
+			Tween(t._label, { TextColor3 = isSelected and VVindUI.Theme.Text or VVindUI.Theme.TextDim }, 0.22)
 			if t._icon then
-				Tween(t._icon, { ImageColor3 = isSelected and NullUI.Theme.Text or NullUI.Theme.TextDim }, 0.22)
+				Tween(t._icon, { ImageColor3 = isSelected and VVindUI.Theme.Text or VVindUI.Theme.TextDim }, 0.22)
 			end
 			if not isSelected then
 				Tween(t._button, { BackgroundTransparency = 1 }, 0.15)
@@ -7096,7 +7086,7 @@ function Window:AddPrivateTab(opts)
 end
  
 function Window:_PromptTabPassword(tabObj, callback)
-	local root = NullUI._Root
+	local root = VVindUI._Root
 	local jan = Janitor.new()
 	local closed = false
 	local settled = false
@@ -7120,7 +7110,7 @@ function Window:_PromptTabPassword(tabObj, callback)
 		local s = GetUIScale()
 		dialog.Position = UDim2.fromOffset(math.round(cx / s), math.round(cy / s))
 	end
-	dialog.BackgroundColor3 = NullUI.Theme.Background
+	dialog.BackgroundColor3 = VVindUI.Theme.Background
 	dialog.BackgroundTransparency = 1
 	dialog.BorderSizePixel = 0
 	dialog.ClipsDescendants = true
@@ -7157,7 +7147,7 @@ function Window:_PromptTabPassword(tabObj, callback)
 	local lockIcon = Instance.new("ImageLabel")
 	lockIcon.BackgroundTransparency = 1
 	lockIcon.Image = ResolveIcon("lock")
-	lockIcon.ImageColor3 = NullUI.Theme.TextDim
+	lockIcon.ImageColor3 = VVindUI.Theme.TextDim
 	lockIcon.Size = UDim2.fromOffset(18, 18)
 	lockIcon.Position = UDim2.fromOffset(0, 0)
 	lockIcon.ZIndex = Z.ModalTop + 2
@@ -7165,9 +7155,9 @@ function Window:_PromptTabPassword(tabObj, callback)
  
 	local title = Instance.new("TextLabel")
 	title.BackgroundTransparency = 1
-	title.FontFace = NullUI.Theme.Font
+	title.FontFace = VVindUI.Theme.Font
 	title.Text = "Private Tab"
-	title.TextColor3 = NullUI.Theme.Text
+	title.TextColor3 = VVindUI.Theme.Text
 	title.TextSize = 16
 	title.TextXAlignment = Enum.TextXAlignment.Left
 	title.Size = UDim2.new(1, -26, 1, 0)
@@ -7177,9 +7167,9 @@ function Window:_PromptTabPassword(tabObj, callback)
  
 	local subtitle = Instance.new("TextLabel")
 	subtitle.BackgroundTransparency = 1
-	subtitle.FontFace = NullUI.Theme.FontRegular
+	subtitle.FontFace = VVindUI.Theme.FontRegular
 	subtitle.Text = ("Enter the password to unlock \"%s\""):format(tabObj.Name or "")
-	subtitle.TextColor3 = NullUI.Theme.TextDim
+	subtitle.TextColor3 = VVindUI.Theme.TextDim
 	subtitle.TextSize = 12
 	subtitle.TextWrapped = true
 	subtitle.TextXAlignment = Enum.TextXAlignment.Left
@@ -7204,10 +7194,10 @@ function Window:_PromptTabPassword(tabObj, callback)
  
 	local box = Instance.new("TextBox")
 	box.BackgroundTransparency = 1
-	box.FontFace = NullUI.Theme.FontRegular
+	box.FontFace = VVindUI.Theme.FontRegular
 	box.PlaceholderText = ""
 	box.Text = ""
-	box.TextColor3 = NullUI.Theme.Text
+	box.TextColor3 = VVindUI.Theme.Text
 	box.TextTransparency = 1
 	box.TextSize = 14
 	box.ClearTextOnFocus = false
@@ -7219,9 +7209,9 @@ function Window:_PromptTabPassword(tabObj, callback)
  
 	local maskLabel = Instance.new("TextLabel")
 	maskLabel.BackgroundTransparency = 1
-	maskLabel.FontFace = NullUI.Theme.FontRegular
+	maskLabel.FontFace = VVindUI.Theme.FontRegular
 	maskLabel.Text = ""
-	maskLabel.TextColor3 = NullUI.Theme.Text
+	maskLabel.TextColor3 = VVindUI.Theme.Text
 	maskLabel.TextSize = 14
 	maskLabel.TextXAlignment = Enum.TextXAlignment.Left
 	maskLabel.Position = box.Position
@@ -7231,9 +7221,9 @@ function Window:_PromptTabPassword(tabObj, callback)
  
 	local placeholderLabel = Instance.new("TextLabel")
 	placeholderLabel.BackgroundTransparency = 1
-	placeholderLabel.FontFace = NullUI.Theme.FontRegular
+	placeholderLabel.FontFace = VVindUI.Theme.FontRegular
 	placeholderLabel.Text = "Password"
-	placeholderLabel.TextColor3 = NullUI.Theme.TextDim
+	placeholderLabel.TextColor3 = VVindUI.Theme.TextDim
 	placeholderLabel.TextSize = 14
 	placeholderLabel.TextXAlignment = Enum.TextXAlignment.Left
 	placeholderLabel.Position = box.Position
@@ -7267,9 +7257,9 @@ function Window:_PromptTabPassword(tabObj, callback)
  
 	local rememberLabel = Instance.new("TextLabel")
 	rememberLabel.BackgroundTransparency = 1
-	rememberLabel.FontFace = NullUI.Theme.FontRegular
+	rememberLabel.FontFace = VVindUI.Theme.FontRegular
 	rememberLabel.Text = "Remember me"
-	rememberLabel.TextColor3 = NullUI.Theme.TextDim
+	rememberLabel.TextColor3 = VVindUI.Theme.TextDim
 	rememberLabel.TextSize = 12
 	rememberLabel.TextXAlignment = Enum.TextXAlignment.Left
 	rememberLabel.AnchorPoint = Vector2.new(0, 0.5)
@@ -7336,9 +7326,9 @@ function Window:_PromptTabPassword(tabObj, callback)
  
 		local lbl = Instance.new("TextLabel")
 		lbl.BackgroundTransparency = 1
-		lbl.FontFace = NullUI.Theme.Font
+		lbl.FontFace = VVindUI.Theme.Font
 		lbl.Text = text_
-		lbl.TextColor3 = NullUI.Theme.Text
+		lbl.TextColor3 = VVindUI.Theme.Text
 		lbl.TextSize = 13
 		lbl.Size = UDim2.fromScale(1, 1)
 		lbl.ZIndex = Z.ModalTop + 2
@@ -7374,9 +7364,9 @@ function Window:_PromptTabPassword(tabObj, callback)
 	end
  
 	local function shakeError()
-		Tween(fieldStroke, { Color = NullUI.Theme.Danger, Transparency = 0.4 }, 0.12)
+		Tween(fieldStroke, { Color = VVindUI.Theme.Danger, Transparency = 0.4 }, 0.12)
 		placeholderLabel.Text = "Incorrect password"
-		Tween(placeholderLabel, { TextColor3 = NullUI.Theme.Danger }, 0.12)
+		Tween(placeholderLabel, { TextColor3 = VVindUI.Theme.Danger }, 0.12)
  
 		local baseX = dialog.Position.X.Offset
 		local seq = { 8, -7, 5, -4, 0 }
@@ -7394,7 +7384,7 @@ function Window:_PromptTabPassword(tabObj, callback)
 		task.delay(1.4, function()
 			if closed then return end
 			Tween(fieldStroke, { Color = Color3.new(1, 1, 1), Transparency = 0.88 }, 0.3)
-			Tween(placeholderLabel, { TextColor3 = NullUI.Theme.TextDim }, 0.3)
+			Tween(placeholderLabel, { TextColor3 = VVindUI.Theme.TextDim }, 0.3)
 			task.delay(0.3, function()
 				if not closed then placeholderLabel.Text = "Password" end
 			end)
@@ -7488,7 +7478,7 @@ function Window:_JumpToSearchable(entry)
 		local baseColor = inst.BackgroundColor3
 		local baseBg = inst.BackgroundTransparency
  
-		inst.BackgroundColor3 = NullUI.Theme.Accent
+		inst.BackgroundColor3 = VVindUI.Theme.Accent
 		Tween(inst, { BackgroundTransparency = 0.85 }, 0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
  
 		task.delay(0.5, function()
@@ -7528,7 +7518,7 @@ end
  
 function Window:_OpenSearch()
 	local self_ = self
-	local root = NullUI._Root
+	local root = VVindUI._Root
 	local panelW = math.min(440, ViewportSize().X / GetUIScale() - 40)
 	local HEADER_H = 50
 	local MAX_RESULTS_H = 280
@@ -7579,7 +7569,7 @@ function Window:_OpenSearch()
 		panel.Position = UDim2.fromOffset(px, py - 18)
 	end
 	panel.Size = UDim2.new(0, panelW, 0, HEADER_H)
-	panel.BackgroundColor3 = NullUI.Theme.Background
+	panel.BackgroundColor3 = VVindUI.Theme.Background
 	panel.BackgroundTransparency = 0.05
 	panel.GroupTransparency = 1
 	panel.BorderSizePixel = 0
@@ -7597,7 +7587,7 @@ function Window:_OpenSearch()
 	local searchIcon = Instance.new("ImageLabel")
 	searchIcon.BackgroundTransparency = 1
 	searchIcon.Image = ResolveIcon("search")
-	searchIcon.ImageColor3 = NullUI.Theme.TextDim
+	searchIcon.ImageColor3 = VVindUI.Theme.TextDim
 	searchIcon.Size = UDim2.fromOffset(16, 16)
 	searchIcon.AnchorPoint = Vector2.new(0, 0.5)
 	searchIcon.Position = UDim2.new(0, 16, 0, HEADER_H / 2)
@@ -7621,7 +7611,7 @@ function Window:_OpenSearch()
 	local closeIcon = Instance.new("ImageLabel")
 	closeIcon.BackgroundTransparency = 1
 	closeIcon.Image = ResolveIcon("x")
-	closeIcon.ImageColor3 = NullUI.Theme.TextDim
+	closeIcon.ImageColor3 = VVindUI.Theme.TextDim
 	closeIcon.Size = UDim2.fromOffset(12, 12)
 	closeIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 	closeIcon.Position = UDim2.fromScale(0.5, 0.5)
@@ -7630,22 +7620,22 @@ function Window:_OpenSearch()
  
 	closeBtn.MouseEnter:Connect(function()
 		Tween(closeBtn, { BackgroundTransparency = 0.9 }, 0.12)
-		Tween(closeIcon, { ImageColor3 = NullUI.Theme.Text }, 0.12)
+		Tween(closeIcon, { ImageColor3 = VVindUI.Theme.Text }, 0.12)
 	end)
 	closeBtn.MouseLeave:Connect(function()
 		Tween(closeBtn, { BackgroundTransparency = 1 }, 0.12)
-		Tween(closeIcon, { ImageColor3 = NullUI.Theme.TextDim }, 0.12)
+		Tween(closeIcon, { ImageColor3 = VVindUI.Theme.TextDim }, 0.12)
 	end)
 	closeBtn.MouseButton1Click:Connect(closeSearch)
  
 	local box = Instance.new("TextBox")
 	box.Name = "SearchBox"
 	box.BackgroundTransparency = 1
-	box.FontFace = NullUI.Theme.FontRegular
+	box.FontFace = VVindUI.Theme.FontRegular
 	box.PlaceholderText = "Search everything..."
 	box.Text = ""
-	box.TextColor3 = NullUI.Theme.Text
-	box.PlaceholderColor3 = NullUI.Theme.TextDim
+	box.TextColor3 = VVindUI.Theme.Text
+	box.PlaceholderColor3 = VVindUI.Theme.TextDim
 	box.TextSize = 15
 	box.ClearTextOnFocus = false
 	box.TextXAlignment = Enum.TextXAlignment.Left
@@ -7698,9 +7688,9 @@ function Window:_OpenSearch()
  
 	local emptyLabel = Instance.new("TextLabel")
 	emptyLabel.BackgroundTransparency = 1
-	emptyLabel.FontFace = NullUI.Theme.FontRegular
+	emptyLabel.FontFace = VVindUI.Theme.FontRegular
 	emptyLabel.Text = "No results"
-	emptyLabel.TextColor3 = NullUI.Theme.TextDim
+	emptyLabel.TextColor3 = VVindUI.Theme.TextDim
 	emptyLabel.TextSize = 13
 	emptyLabel.Visible = false
 	emptyLabel.Position = UDim2.new(0, 0, 0, HEADER_H + 9)
@@ -7750,9 +7740,9 @@ function Window:_OpenSearch()
  
 			local titleLbl = Instance.new("TextLabel")
 			titleLbl.BackgroundTransparency = 1
-			titleLbl.FontFace = NullUI.Theme.Font
+			titleLbl.FontFace = VVindUI.Theme.Font
 			titleLbl.Text = entry.title
-			titleLbl.TextColor3 = NullUI.Theme.Text
+			titleLbl.TextColor3 = VVindUI.Theme.Text
 			titleLbl.TextSize = 13
 			titleLbl.TextXAlignment = Enum.TextXAlignment.Left
 			titleLbl.TextTruncate = Enum.TextTruncate.AtEnd
@@ -7763,9 +7753,9 @@ function Window:_OpenSearch()
  
 			local pathLbl = Instance.new("TextLabel")
 			pathLbl.BackgroundTransparency = 1
-			pathLbl.FontFace = NullUI.Theme.FontRegular
+			pathLbl.FontFace = VVindUI.Theme.FontRegular
 			pathLbl.Text = SearchEntryPath(entry.tabObj)
-			pathLbl.TextColor3 = NullUI.Theme.TextDim
+			pathLbl.TextColor3 = VVindUI.Theme.TextDim
 			pathLbl.TextSize = 11
 			pathLbl.TextXAlignment = Enum.TextXAlignment.Left
 			pathLbl.TextTruncate = Enum.TextTruncate.AtEnd
@@ -7909,7 +7899,7 @@ function Tab:AddSubTab(nameOrOpts)
  
 		self._subTabScrollTrack = Instance.new("Frame")
 		self._subTabScrollTrack.Name = "SubTabScrollTrack"
-		self._subTabScrollTrack.BackgroundColor3 = NullUI.Theme.TextDim
+		self._subTabScrollTrack.BackgroundColor3 = VVindUI.Theme.TextDim
 		self._subTabScrollTrack.BackgroundTransparency = 0.85
 		self._subTabScrollTrack.BorderSizePixel = 0
 		self._subTabScrollTrack.Position = UDim2.new(0, 2, 0, 48)
@@ -7921,7 +7911,7 @@ function Tab:AddSubTab(nameOrOpts)
  
 		self._subTabScrollThumb = Instance.new("Frame")
 		self._subTabScrollThumb.Name = "Thumb"
-		self._subTabScrollThumb.BackgroundColor3 = NullUI.Theme.TextDim
+		self._subTabScrollThumb.BackgroundColor3 = VVindUI.Theme.TextDim
 		self._subTabScrollThumb.BackgroundTransparency = 0.35
 		self._subTabScrollThumb.BorderSizePixel = 0
 		self._subTabScrollThumb.Size = UDim2.new(0, 40, 1, 0)
@@ -8017,7 +8007,7 @@ function Tab:AddSubTab(nameOrOpts)
 		ic = Instance.new("ImageLabel")
 		ic.BackgroundTransparency = 1
 		ic.Image = iconAsset
-		ic.ImageColor3 = NullUI.Theme.TextDim
+		ic.ImageColor3 = VVindUI.Theme.TextDim
 		ic.Size = UDim2.fromOffset(16, 16)
 		ic.LayoutOrder = 1
 		ic.ZIndex = Z.Content + 1
@@ -8026,9 +8016,9 @@ function Tab:AddSubTab(nameOrOpts)
  
 	local lbl = Instance.new("TextLabel")
 	lbl.BackgroundTransparency = 1
-	lbl.FontFace = NullUI.Theme.Font
+	lbl.FontFace = VVindUI.Theme.Font
 	lbl.Text = title
-	lbl.TextColor3 = NullUI.Theme.TextDim
+	lbl.TextColor3 = VVindUI.Theme.TextDim
 	lbl.TextSize = 13
 	lbl.TextXAlignment = Enum.TextXAlignment.Center
 	lbl.TextYAlignment = Enum.TextYAlignment.Center
@@ -8164,9 +8154,9 @@ function Tab:SelectSubTab(idx)
 		if not sel then
 			Tween(st.Button, { BackgroundTransparency = 1 }, 0.15)
 		end
-		Tween(st.Label, { TextColor3 = sel and NullUI.Theme.Text or NullUI.Theme.TextDim }, 0.22)
+		Tween(st.Label, { TextColor3 = sel and VVindUI.Theme.Text or VVindUI.Theme.TextDim }, 0.22)
 		if st.Icon then
-			Tween(st.Icon, { ImageColor3 = sel and NullUI.Theme.Text or NullUI.Theme.TextDim }, 0.22)
+			Tween(st.Icon, { ImageColor3 = sel and VVindUI.Theme.Text or VVindUI.Theme.TextDim }, 0.22)
 		end
 	end
  
@@ -8254,18 +8244,18 @@ local function RegisterFlag(opts, api, kind, validator)
 		if type(flag) ~= "string" or flag:gsub("%s", "") == "" then
 			error("Control Flag must be a non-empty string", 2)
 		end
-		if NullUI.Flags[flag] then error("duplicate flag '" .. flag .. "'", 2) end
+		if VVindUI.Flags[flag] then error("duplicate flag '" .. flag .. "'", 2) end
 		api.Flag = flag
 		api.Kind = kind
 		api.Label = opts.Text or opts.Label or flag
 		api.ValidateConfig = validator or function(value) return ValidateConfigFlag(api, value) end
-		NullUI.Flags[flag] = api
-		NullUI.ConfigFlags[flag] = api.Set
-		NullUI.ConfigValidators[flag] = api.ValidateConfig
+		VVindUI.Flags[flag] = api
+		VVindUI.ConfigFlags[flag] = api.Set
+		VVindUI.ConfigValidators[flag] = api.ValidateConfig
 		if type(api.OnChanged) == "function" then
 			local ok, connection = pcall(api.OnChanged, api, function()
-				if not NullUI._ApplyingConfig and NullUI.QueueAutoConfigSave then
-					NullUI:QueueAutoConfigSave(flag)
+				if not VVindUI._ApplyingConfig and VVindUI.QueueAutoConfigSave then
+					VVindUI:QueueAutoConfigSave(flag)
 				end
 			end)
 			if ok then api._ConfigChangeConnection = connection end
@@ -8276,15 +8266,15 @@ local function RegisterFlag(opts, api, kind, validator)
 				local connection = self._ConfigChangeConnection
 				if connection and type(connection.Disconnect) == "function" then pcall(function() connection:Disconnect() end) end
 				self._ConfigChangeConnection = nil
-				if NullUI.Flags[flag] == self then
-					NullUI.Flags[flag] = nil
-					NullUI.ConfigFlags[flag] = nil
-					NullUI.ConfigValidators[flag] = nil
+				if VVindUI.Flags[flag] == self then
+					VVindUI.Flags[flag] = nil
+					VVindUI.ConfigFlags[flag] = nil
+					VVindUI.ConfigValidators[flag] = nil
 				end
 				return originalDestroy(self, ...)
 			end
 		end
-		if NullUI.ApplyAutoConfigFlag then NullUI:ApplyAutoConfigFlag(flag) end
+		if VVindUI.ApplyAutoConfigFlag then VVindUI:ApplyAutoConfigFlag(flag) end
 	end
 	return api
 end
@@ -8292,9 +8282,9 @@ end
 function Tab:AddLabel(text)
 	local label = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
-	label.FontFace = NullUI.Theme.FontRegular
+	label.FontFace = VVindUI.Theme.FontRegular
 	label.Text = text
-	label.TextColor3 = NullUI.Theme.TextDim
+	label.TextColor3 = VVindUI.Theme.TextDim
 	label.TextSize = 13
 	label.TextWrapped = true
 	label.TextXAlignment = Enum.TextXAlignment.Left
@@ -8328,7 +8318,7 @@ function Tab:AddSection(textOrOpts, maybeIcon)
 		local img = Instance.new("ImageLabel")
 		img.BackgroundTransparency = 1
 		img.Image = iconAsset
-		img.ImageColor3 = NullUI.Theme.TextDim
+		img.ImageColor3 = VVindUI.Theme.TextDim
 		img.Size = UDim2.fromOffset(13, 13)
 		img.Position = UDim2.fromOffset(2, 8)
 		img.ZIndex = Z.Content + 1
@@ -8338,9 +8328,9 @@ function Tab:AddSection(textOrOpts, maybeIcon)
  
 	local label = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
-	label.FontFace = NullUI.Theme.Font
+	label.FontFace = VVindUI.Theme.Font
 	label.Text = string.upper(text)
-	label.TextColor3 = NullUI.Theme.TextDim
+	label.TextColor3 = VVindUI.Theme.TextDim
 	label.TextSize = 12
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.TextTruncate = Enum.TextTruncate.AtEnd
@@ -8414,9 +8404,9 @@ function Tab:AddLineText(text)
 	local label = Instance.new("TextLabel")
 	label.Name = "Label"
 	label.BackgroundTransparency = 1
-	label.FontFace = NullUI.Theme.FontRegular
+	label.FontFace = VVindUI.Theme.FontRegular
 	label.Text = text
-	label.TextColor3 = NullUI.Theme.TextDim
+	label.TextColor3 = VVindUI.Theme.TextDim
 	label.TextSize = 12
 	label.AnchorPoint = Vector2.new(0.5, 0.5)
 	label.Position = UDim2.fromScale(0.5, 0.5)
@@ -8495,7 +8485,7 @@ function Tab:AddParagraph(opts)
 			local img = Instance.new("ImageLabel")
 			img.BackgroundTransparency = 1
 			img.Image = iconAsset
-			img.ImageColor3 = NullUI.Theme.Text
+			img.ImageColor3 = VVindUI.Theme.Text
 			img.Size = UDim2.fromOffset(15, 15)
 			img.LayoutOrder = 1
 			img.ZIndex = Z.Content + 2
@@ -8504,9 +8494,9 @@ function Tab:AddParagraph(opts)
  
 		titleLabel = Instance.new("TextLabel")
 		titleLabel.BackgroundTransparency = 1
-		titleLabel.FontFace = NullUI.Theme.Font
+		titleLabel.FontFace = VVindUI.Theme.Font
 		titleLabel.Text = opts.Title
-		titleLabel.TextColor3 = NullUI.Theme.Text
+		titleLabel.TextColor3 = VVindUI.Theme.Text
 		titleLabel.TextSize = 14
 		titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 		titleLabel.TextYAlignment = Enum.TextYAlignment.Center
@@ -8523,9 +8513,9 @@ function Tab:AddParagraph(opts)
  
 	local textLabel = Instance.new("TextLabel")
 	textLabel.BackgroundTransparency = 1
-	textLabel.FontFace = NullUI.Theme.FontRegular
+	textLabel.FontFace = VVindUI.Theme.FontRegular
 	textLabel.Text = opts.Text or ""
-	textLabel.TextColor3 = NullUI.Theme.TextDim
+	textLabel.TextColor3 = VVindUI.Theme.TextDim
 	textLabel.TextSize = 13
 	textLabel.TextWrapped = true
 	textLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -8572,7 +8562,7 @@ local function BuildStarRow(parent, layoutOrder, maxStars, starColor, starSize, 
 		for i, button in ipairs(stars) do
 			local on = i <= count
 			button.Image = on and starFilled or starOutline
-			Tween(button, { ImageColor3 = on and starColor or NullUI.Theme.TextDim }, 0.12)
+			Tween(button, { ImageColor3 = on and starColor or VVindUI.Theme.TextDim }, 0.12)
 		end
 	end
  
@@ -8582,7 +8572,7 @@ local function BuildStarRow(parent, layoutOrder, maxStars, starColor, starSize, 
 		button.BackgroundTransparency = 1
 		button.AutoButtonColor = false
 		button.Image = starOutline
-		button.ImageColor3 = NullUI.Theme.TextDim
+		button.ImageColor3 = VVindUI.Theme.TextDim
 		button.Size = UDim2.fromOffset(starSize, starSize)
 		button.LayoutOrder = i
 		button.ZIndex = Z.Content + 2
@@ -8736,7 +8726,7 @@ local function SanitizeFeedbackText(text)
 	return text
 end
  
-function NullUI:SanitizeText(text, opts)
+function VVindUI:SanitizeText(text, opts)
 	opts = opts or {}
 	local maxLength = opts.MaxLength or 500
  
@@ -8768,7 +8758,7 @@ end
 local FEEDBACK_WEBHOOK_COOLDOWN = 30
 local LastFeedbackWebhookAt = 0
  
-function NullUI:SendFeedbackWebhook(webhookUrl, stars, message, opts)
+function VVindUI:SendFeedbackWebhook(webhookUrl, stars, message, opts)
 	opts = opts or {}
 	stars = math.clamp(math.floor((stars or 0) + 0.5), 0, 5)
  
@@ -8888,11 +8878,11 @@ local function BuildFeedbackRow(parent, layoutOrder, rowH, placeholder, buttonIc
 	local box = Instance.new("TextBox")
 	box.BackgroundTransparency = 1
 	box.ClearTextOnFocus = false
-	box.FontFace = NullUI.Theme.FontRegular
+	box.FontFace = VVindUI.Theme.FontRegular
 	box.PlaceholderText = placeholder or "Give us some feedback!"
 	box.PlaceholderColor3 = Color3.fromRGB(120, 120, 122)
 	box.Text = ""
-	box.TextColor3 = NullUI.Theme.Text
+	box.TextColor3 = VVindUI.Theme.Text
 	box.TextSize = 13
 	box.TextXAlignment = Enum.TextXAlignment.Left
 	box.TextYAlignment = Enum.TextYAlignment.Center
@@ -8903,7 +8893,7 @@ local function BuildFeedbackRow(parent, layoutOrder, rowH, placeholder, buttonIc
 	box.Parent = pill
  
 	box.Focused:Connect(function()
-		Tween(pillStroke, { Color = NullUI.Theme.Accent, Transparency = 0.3 }, 0.15)
+		Tween(pillStroke, { Color = VVindUI.Theme.Accent, Transparency = 0.3 }, 0.15)
 	end)
 	box.FocusLost:Connect(function()
 		Tween(pillStroke, { Color = Color3.new(1, 1, 1), Transparency = 0.9 }, 0.15)
@@ -8926,7 +8916,7 @@ local function BuildFeedbackRow(parent, layoutOrder, rowH, placeholder, buttonIc
 	local sendIcon = Instance.new("ImageLabel")
 	sendIcon.BackgroundTransparency = 1
 	sendIcon.Image = ResolveIcon(buttonIcon or "send")
-	sendIcon.ImageColor3 = NullUI.Theme.Text
+	sendIcon.ImageColor3 = VVindUI.Theme.Text
 	sendIcon.Size = UDim2.fromOffset(12, 12)
 	sendIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 	sendIcon.Position = UDim2.fromScale(0.5, 0.5)
@@ -8963,9 +8953,9 @@ function Tab:AddRating(opts)
 	if hasTitle then
 		local titleLabel = Instance.new("TextLabel")
 		titleLabel.BackgroundTransparency = 1
-		titleLabel.FontFace = NullUI.Theme.Font
+		titleLabel.FontFace = VVindUI.Theme.Font
 		titleLabel.Text = opts.Title
-		titleLabel.TextColor3 = NullUI.Theme.Text
+		titleLabel.TextColor3 = VVindUI.Theme.Text
 		titleLabel.TextSize = 14
 		titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 		titleLabel.Size = UDim2.new(1, 0, 0, 16)
@@ -8989,7 +8979,7 @@ function Tab:AddRating(opts)
 		if opts.Callback then task.spawn(opts.Callback, selected, feedback.Box.Text) end
 		if opts.WebhookUrl then
 			task.spawn(function()
-				NullUI:SendFeedbackWebhook(opts.WebhookUrl, selected, feedback.Box.Text, opts.WebhookOptions)
+				VVindUI:SendFeedbackWebhook(opts.WebhookUrl, selected, feedback.Box.Text, opts.WebhookOptions)
 			end)
 		end
 		if clearOnSubmit then
@@ -9022,7 +9012,7 @@ function Tab:AddButton(opts)
 	local chev = Instance.new("ImageLabel")
 	chev.BackgroundTransparency = 1
 	chev.Image = ResolveIcon("chevron-right")
-	chev.ImageColor3 = NullUI.Theme.TextDim
+	chev.ImageColor3 = VVindUI.Theme.TextDim
 	chev.Size = UDim2.fromOffset(14, 14)
 	chev.AnchorPoint = Vector2.new(1, 0.5)
 	chev.Position = UDim2.new(1, -16, 0.5, 0)
@@ -9039,19 +9029,19 @@ function Tab:AddButton(opts)
  
 	click.MouseEnter:Connect(function()
 		Tween(card, { BackgroundTransparency = 0.9 }, 0.15)
-		Tween(chev, { ImageColor3 = NullUI.Theme.Text, Position = UDim2.new(1, -12, 0.5, 0) }, 0.15)
+		Tween(chev, { ImageColor3 = VVindUI.Theme.Text, Position = UDim2.new(1, -12, 0.5, 0) }, 0.15)
 	end)
 	click.MouseLeave:Connect(function()
 		Tween(card, { BackgroundTransparency = 0.96 }, 0.15)
-		Tween(chev, { ImageColor3 = NullUI.Theme.TextDim, Position = UDim2.new(1, -16, 0.5, 0) }, 0.15)
+		Tween(chev, { ImageColor3 = VVindUI.Theme.TextDim, Position = UDim2.new(1, -16, 0.5, 0) }, 0.15)
 	end)
 	click.MouseButton1Click:Connect(function()
 		Tween(card, { BackgroundTransparency = 0.8 }, 0.08)
-		Tween(chev, { ImageColor3 = NullUI.Theme.Accent }, 0.08)
+		Tween(chev, { ImageColor3 = VVindUI.Theme.Accent }, 0.08)
 		task.delay(0.08, function()
 			if not card.Parent then return end
 			Tween(card, { BackgroundTransparency = 0.9 }, 0.15)
-			Tween(chev, { ImageColor3 = NullUI.Theme.Text }, 0.15)
+			Tween(chev, { ImageColor3 = VVindUI.Theme.Text }, 0.15)
 		end)
 		if opts.Callback then task.spawn(opts.Callback) end
 	end)
@@ -9100,7 +9090,7 @@ function Tab:AddCard(opts)
 		imgHolder.ClipsDescendants = true
 		imgHolder.ZIndex = Z.Content + 1
 		imgHolder.Parent = card
-		Corner(imgHolder, NullUI.Theme.CornerRadiusSm)
+		Corner(imgHolder, VVindUI.Theme.CornerRadiusSm)
 		Stroke(imgHolder, Color3.new(1, 1, 1), 1, 0.85)
  
 		local img = Instance.new("ImageLabel")
@@ -9109,7 +9099,7 @@ function Tab:AddCard(opts)
 		img.Size = UDim2.fromScale(1, 1)
 		img.ZIndex = Z.Content + 2
 		img.Parent = imgHolder
-		Corner(img, NullUI.Theme.CornerRadiusSm)
+		Corner(img, VVindUI.Theme.CornerRadiusSm)
  
 		if opts.UserId then
 			task.spawn(function()
@@ -9139,7 +9129,7 @@ function Tab:AddCard(opts)
 		local chev = Instance.new("ImageLabel")
 		chev.BackgroundTransparency = 1
 		chev.Image = ResolveIcon("chevron-right")
-		chev.ImageColor3 = NullUI.Theme.TextDim
+		chev.ImageColor3 = VVindUI.Theme.TextDim
 		chev.Size = UDim2.fromOffset(14, 14)
 		chev.AnchorPoint = Vector2.new(1, 0.5)
 		chev.Position = UDim2.new(1, -16, 0.5, 0)
@@ -9156,11 +9146,11 @@ function Tab:AddCard(opts)
  
 		click.MouseEnter:Connect(function()
 			Tween(card, { BackgroundTransparency = 0.9 }, 0.15)
-			Tween(chev, { ImageColor3 = NullUI.Theme.Text, Position = UDim2.new(1, -12, 0.5, 0) }, 0.15)
+			Tween(chev, { ImageColor3 = VVindUI.Theme.Text, Position = UDim2.new(1, -12, 0.5, 0) }, 0.15)
 		end)
 		click.MouseLeave:Connect(function()
 			Tween(card, { BackgroundTransparency = 0.96 }, 0.15)
-			Tween(chev, { ImageColor3 = NullUI.Theme.TextDim, Position = UDim2.new(1, -16, 0.5, 0) }, 0.15)
+			Tween(chev, { ImageColor3 = VVindUI.Theme.TextDim, Position = UDim2.new(1, -16, 0.5, 0) }, 0.15)
 		end)
 		click.MouseButton1Click:Connect(function()
 			Tween(card, { BackgroundTransparency = 0.8 }, 0.08)
@@ -9188,9 +9178,9 @@ function Tab:AddCard(opts)
  
 		local footerLabel = Instance.new("TextLabel")
 		footerLabel.BackgroundTransparency = 1
-		footerLabel.FontFace = NullUI.Theme.Font
+		footerLabel.FontFace = VVindUI.Theme.Font
 		footerLabel.Text = opts.ButtonText
-		footerLabel.TextColor3 = NullUI.Theme.Text
+		footerLabel.TextColor3 = VVindUI.Theme.Text
 		footerLabel.TextSize = 13
 		footerLabel.Size = UDim2.fromScale(1, 1)
 		footerLabel.ZIndex = Z.Content + 2
@@ -9249,9 +9239,9 @@ function Tab:AddCard(opts)
 		if ratingHasTitle then
 			local ratingLabel = Instance.new("TextLabel")
 			ratingLabel.BackgroundTransparency = 1
-			ratingLabel.FontFace = NullUI.Theme.Font
+			ratingLabel.FontFace = VVindUI.Theme.Font
 			ratingLabel.Text = ratingOpts.Title
-			ratingLabel.TextColor3 = NullUI.Theme.Text
+			ratingLabel.TextColor3 = VVindUI.Theme.Text
 			ratingLabel.TextSize = 13
 			ratingLabel.TextXAlignment = Enum.TextXAlignment.Left
 			ratingLabel.Size = UDim2.new(1, 0, 0, RATING_LABEL_H)
@@ -9274,7 +9264,7 @@ function Tab:AddCard(opts)
 			if ratingOpts.Callback then task.spawn(ratingOpts.Callback, sel, feedback.Box.Text) end
 			if ratingOpts.WebhookUrl then
 				task.spawn(function()
-					NullUI:SendFeedbackWebhook(ratingOpts.WebhookUrl, sel, feedback.Box.Text, ratingOpts.WebhookOptions)
+					VVindUI:SendFeedbackWebhook(ratingOpts.WebhookUrl, sel, feedback.Box.Text, ratingOpts.WebhookOptions)
 				end)
 			end
 			if clearOnSubmit then
@@ -9331,9 +9321,9 @@ function Tab:AddChangelogEntry(opts)
  
 	local versionLabel = Instance.new("TextLabel")
 	versionLabel.BackgroundTransparency = 1
-	versionLabel.FontFace = NullUI.Theme.Font
+	versionLabel.FontFace = VVindUI.Theme.Font
 	versionLabel.Text = version
-	versionLabel.TextColor3 = NullUI.Theme.Text
+	versionLabel.TextColor3 = VVindUI.Theme.Text
 	versionLabel.TextSize = 14
 	versionLabel.TextXAlignment = Enum.TextXAlignment.Left
 	versionLabel.TextTruncate = Enum.TextTruncate.AtEnd
@@ -9344,9 +9334,9 @@ function Tab:AddChangelogEntry(opts)
 	if date then
 		local dateLabel = Instance.new("TextLabel")
 		dateLabel.BackgroundTransparency = 1
-		dateLabel.FontFace = NullUI.Theme.FontRegular
+		dateLabel.FontFace = VVindUI.Theme.FontRegular
 		dateLabel.Text = date
-		dateLabel.TextColor3 = NullUI.Theme.TextDim
+		dateLabel.TextColor3 = VVindUI.Theme.TextDim
 		dateLabel.TextSize = 12
 		dateLabel.TextXAlignment = Enum.TextXAlignment.Right
 		dateLabel.AnchorPoint = Vector2.new(1, 0)
@@ -9413,7 +9403,7 @@ function Tab:AddChangelogEntry(opts)
  
 		local pillLabel = Instance.new("TextLabel")
 		pillLabel.BackgroundTransparency = 1
-		pillLabel.FontFace = NullUI.Theme.Font
+		pillLabel.FontFace = VVindUI.Theme.Font
 		pillLabel.Text = string.upper(kind)
 		pillLabel.TextColor3 = meta.Color
 		pillLabel.TextSize = 9
@@ -9425,9 +9415,9 @@ function Tab:AddChangelogEntry(opts)
  
 		local changeLabel = Instance.new("TextLabel")
 		changeLabel.BackgroundTransparency = 1
-		changeLabel.FontFace = NullUI.Theme.FontRegular
+		changeLabel.FontFace = VVindUI.Theme.FontRegular
 		changeLabel.Text = tostring(change.Text or "")
-		changeLabel.TextColor3 = NullUI.Theme.TextDim
+		changeLabel.TextColor3 = VVindUI.Theme.TextDim
 		changeLabel.TextSize = 12
 		changeLabel.TextXAlignment = Enum.TextXAlignment.Left
 		changeLabel.TextYAlignment = Enum.TextYAlignment.Top
@@ -9473,7 +9463,7 @@ end
 function Tab:AddLoadoutGroup(opts)
 	opts = opts or {}
 	local title = opts.Title or "Loadout"
-	local color = opts.Color or NullUI.Theme.Accent
+	local color = opts.Color or VVindUI.Theme.Accent
 	local icons = opts.Icons or {}
 	local buttonText = opts.ButtonText or "Equip"
  
@@ -9514,9 +9504,9 @@ function Tab:AddLoadoutGroup(opts)
  
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.BackgroundTransparency = 1
-	titleLabel.FontFace = NullUI.Theme.Font
+	titleLabel.FontFace = VVindUI.Theme.Font
 	titleLabel.Text = string.upper(title)
-	titleLabel.TextColor3 = NullUI.Theme.TextDim
+	titleLabel.TextColor3 = VVindUI.Theme.TextDim
 	titleLabel.TextSize = 12
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.Position = UDim2.fromOffset(15, 0)
@@ -9549,7 +9539,7 @@ function Tab:AddLoadoutGroup(opts)
 		slot.LayoutOrder = i
 		slot.ZIndex = Z.Content + 2
 		slot.Parent = iconsRow
-		Corner(slot, NullUI.Theme.CornerRadiusSm)
+		Corner(slot, VVindUI.Theme.CornerRadiusSm)
 		Stroke(slot, Color3.new(1, 1, 1), 1, 0.94)
  
 		local img = Instance.new("ImageLabel")
@@ -9578,9 +9568,9 @@ function Tab:AddLoadoutGroup(opts)
  
 	local btnLabel = Instance.new("TextLabel")
 	btnLabel.BackgroundTransparency = 1
-	btnLabel.FontFace = NullUI.Theme.Font
+	btnLabel.FontFace = VVindUI.Theme.Font
 	btnLabel.Text = buttonText
-	btnLabel.TextColor3 = NullUI.Theme.Text
+	btnLabel.TextColor3 = VVindUI.Theme.Text
 	btnLabel.TextSize = 12
 	btnLabel.Size = UDim2.fromScale(1, 1)
 	btnLabel.ZIndex = Z.Content + 2
@@ -9645,9 +9635,9 @@ function Tab:AddInfoGrid(opts)
  
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.BackgroundTransparency = 1
-	titleLabel.FontFace = NullUI.Theme.Font
+	titleLabel.FontFace = VVindUI.Theme.Font
 	titleLabel.Text = title
-	titleLabel.TextColor3 = NullUI.Theme.Text
+	titleLabel.TextColor3 = VVindUI.Theme.Text
 	titleLabel.TextSize = 14
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
@@ -9659,9 +9649,9 @@ function Tab:AddInfoGrid(opts)
 	if hasDesc then
 		local descLabel = Instance.new("TextLabel")
 		descLabel.BackgroundTransparency = 1
-		descLabel.FontFace = NullUI.Theme.FontRegular
+		descLabel.FontFace = VVindUI.Theme.FontRegular
 		descLabel.Text = opts.Description
-		descLabel.TextColor3 = NullUI.Theme.TextDim
+		descLabel.TextColor3 = VVindUI.Theme.TextDim
 		descLabel.TextSize = 12
 		descLabel.TextWrapped = true
 		descLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -9717,9 +9707,9 @@ function Tab:AddInfoGrid(opts)
  
 			local labelLabel = Instance.new("TextLabel")
 			labelLabel.BackgroundTransparency = 1
-			labelLabel.FontFace = NullUI.Theme.Font
+			labelLabel.FontFace = VVindUI.Theme.Font
 			labelLabel.Text = tostring(item.Label or "")
-			labelLabel.TextColor3 = NullUI.Theme.Text
+			labelLabel.TextColor3 = VVindUI.Theme.Text
 			labelLabel.TextSize = 12
 			labelLabel.TextXAlignment = Enum.TextXAlignment.Left
 			labelLabel.TextTruncate = Enum.TextTruncate.AtEnd
@@ -9730,9 +9720,9 @@ function Tab:AddInfoGrid(opts)
 			local valueLabel = Instance.new("TextLabel")
 			valueLabel.Name = "Value"
 			valueLabel.BackgroundTransparency = 1
-			valueLabel.FontFace = NullUI.Theme.FontRegular
+			valueLabel.FontFace = VVindUI.Theme.FontRegular
 			valueLabel.Text = tostring(item.Value or "")
-			valueLabel.TextColor3 = NullUI.Theme.TextDim
+			valueLabel.TextColor3 = VVindUI.Theme.TextDim
 			valueLabel.TextSize = 11
 			valueLabel.TextXAlignment = Enum.TextXAlignment.Left
 			valueLabel.TextTruncate = Enum.TextTruncate.AtEnd
@@ -9873,22 +9863,22 @@ function Tab:AddLeaderboard(opts)
  
 	local container = Instance.new("Frame")
 	container.Name = "Leaderboard"
-	container.BackgroundColor3 = NullUI.Theme.Surface
+	container.BackgroundColor3 = VVindUI.Theme.Surface
 	container.BackgroundTransparency = 0.35
 	container.BorderSizePixel = 0
 	container.ClipsDescendants = true
 	container.Size = UDim2.new(1, 0, 0, totalHeight)
 	container.ZIndex = Z.Content
 	container.Parent = self._page
-	Corner(container, NullUI.Theme.CornerRadiusSm)
+	Corner(container, VVindUI.Theme.CornerRadiusSm)
 	Stroke(container, Color3.new(1, 1, 1), 1, 0.92)
 	self._window:_RegisterSearchable(self, title, container)
  
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.BackgroundTransparency = 1
-	titleLabel.FontFace = NullUI.Theme.Font
+	titleLabel.FontFace = VVindUI.Theme.Font
 	titleLabel.Text = title
-	titleLabel.TextColor3 = NullUI.Theme.Text
+	titleLabel.TextColor3 = VVindUI.Theme.Text
 	titleLabel.TextSize = 14
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
@@ -9900,9 +9890,9 @@ function Tab:AddLeaderboard(opts)
 	if hasDesc then
 		local descLabel = Instance.new("TextLabel")
 		descLabel.BackgroundTransparency = 1
-		descLabel.FontFace = NullUI.Theme.FontRegular
+		descLabel.FontFace = VVindUI.Theme.FontRegular
 		descLabel.Text = opts.Description
-		descLabel.TextColor3 = NullUI.Theme.TextDim
+		descLabel.TextColor3 = VVindUI.Theme.TextDim
 		descLabel.TextSize = 12
 		descLabel.TextWrapped = true
 		descLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -9932,7 +9922,7 @@ function Tab:AddLeaderboard(opts)
 	local revealIcon = Instance.new("ImageLabel")
 	revealIcon.BackgroundTransparency = 1
 	revealIcon.Image = ResolveIcon(revealMe and "eye" or "eye-off")
-	revealIcon.ImageColor3 = NullUI.Theme.TextDim
+	revealIcon.ImageColor3 = VVindUI.Theme.TextDim
 	revealIcon.Size = UDim2.fromOffset(14, 14)
 	revealIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 	revealIcon.Position = UDim2.fromScale(0.5, 0.5)
@@ -9941,11 +9931,11 @@ function Tab:AddLeaderboard(opts)
  
 	jan:Add(revealBtn.MouseEnter:Connect(function()
 		Tween(revealBtn, { BackgroundTransparency = 0.9 }, 0.12)
-		Tween(revealIcon, { ImageColor3 = NullUI.Theme.Text }, 0.12)
+		Tween(revealIcon, { ImageColor3 = VVindUI.Theme.Text }, 0.12)
 	end))
 	jan:Add(revealBtn.MouseLeave:Connect(function()
 		Tween(revealBtn, { BackgroundTransparency = 1 }, 0.12)
-		Tween(revealIcon, { ImageColor3 = NullUI.Theme.TextDim }, 0.12)
+		Tween(revealIcon, { ImageColor3 = VVindUI.Theme.TextDim }, 0.12)
 	end))
  
 	local divider = Instance.new("Frame")
@@ -9972,9 +9962,9 @@ function Tab:AddLeaderboard(opts)
  
 	local emptyLabel = Instance.new("TextLabel")
 	emptyLabel.BackgroundTransparency = 1
-	emptyLabel.FontFace = NullUI.Theme.FontRegular
+	emptyLabel.FontFace = VVindUI.Theme.FontRegular
 	emptyLabel.Text = "No one's run this yet"
-	emptyLabel.TextColor3 = NullUI.Theme.TextDim
+	emptyLabel.TextColor3 = VVindUI.Theme.TextDim
 	emptyLabel.TextSize = 12
 	emptyLabel.Position = UDim2.fromOffset(PAD, listY + 10)
 	emptyLabel.Size = UDim2.new(1, -PAD * 2, 0, 16)
@@ -10022,7 +10012,7 @@ function Tab:AddLeaderboard(opts)
 		row.Size = UDim2.new(1, 0, 0, ROW_H)
 		row.ZIndex = Z.Content + 2
 		row.Parent = list
-		Corner(row, NullUI.Theme.CornerRadiusSm)
+		Corner(row, VVindUI.Theme.CornerRadiusSm)
 		Stroke(row, Color3.new(1, 1, 1), 1, item.IsYou and 0.88 or 0.94)
  
 		local baseTransparency = row.BackgroundTransparency
@@ -10059,9 +10049,9 @@ function Tab:AddLeaderboard(opts)
 		else
 			local badgeLabel = Instance.new("TextLabel")
 			badgeLabel.BackgroundTransparency = 1
-			badgeLabel.FontFace = NullUI.Theme.Font
+			badgeLabel.FontFace = VVindUI.Theme.Font
 			badgeLabel.Text = "#" .. tostring(index)
-			badgeLabel.TextColor3 = NullUI.Theme.TextDim
+			badgeLabel.TextColor3 = VVindUI.Theme.TextDim
 			badgeLabel.TextSize = 11
 			badgeLabel.Size = UDim2.fromScale(1, 1)
 			badgeLabel.ZIndex = Z.Content + 4
@@ -10104,7 +10094,7 @@ function Tab:AddLeaderboard(opts)
 			local placeholder = Instance.new("ImageLabel")
 			placeholder.BackgroundTransparency = 1
 			placeholder.Image = ResolveIcon("user")
-			placeholder.ImageColor3 = NullUI.Theme.TextDim
+			placeholder.ImageColor3 = VVindUI.Theme.TextDim
 			placeholder.Size = UDim2.fromOffset(14, 14)
 			placeholder.AnchorPoint = Vector2.new(0.5, 0.5)
 			placeholder.Position = UDim2.fromScale(0.5, 0.5)
@@ -10114,10 +10104,10 @@ function Tab:AddLeaderboard(opts)
  
 		local nameLabel = Instance.new("TextLabel")
 		nameLabel.BackgroundTransparency = 1
-		nameLabel.FontFace = NullUI.Theme.Font
+		nameLabel.FontFace = VVindUI.Theme.Font
 		nameLabel.Text = (item.NamePreview and item.NamePreview ~= "" and item.NamePreview or fallbackLabel(item.Identity))
 			.. (item.IsYou and "  (You)" or "")
-		nameLabel.TextColor3 = NullUI.Theme.Text
+		nameLabel.TextColor3 = VVindUI.Theme.Text
 		nameLabel.TextSize = 13
 		nameLabel.TextXAlignment = Enum.TextXAlignment.Left
 		nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
@@ -10128,9 +10118,9 @@ function Tab:AddLeaderboard(opts)
  
 		local timeLabel = Instance.new("TextLabel")
 		timeLabel.BackgroundTransparency = 1
-		timeLabel.FontFace = NullUI.Theme.FontRegular
+		timeLabel.FontFace = VVindUI.Theme.FontRegular
 		timeLabel.Text = formatSeconds(item.Seconds)
-		timeLabel.TextColor3 = NullUI.Theme.TextDim
+		timeLabel.TextColor3 = VVindUI.Theme.TextDim
 		timeLabel.TextSize = 12
 		timeLabel.TextXAlignment = Enum.TextXAlignment.Right
 		timeLabel.AnchorPoint = Vector2.new(1, 0)
@@ -10166,7 +10156,7 @@ function Tab:AddLeaderboard(opts)
 	jan:Add(revealBtn.MouseButton1Click:Connect(function()
 		revealMe = not revealMe
 		revealIcon.Image = ResolveIcon(revealMe and "eye" or "eye-off")
-		NullUI:Notify({
+		VVindUI:Notify({
 			Title = "Leaderboard",
 			Text  = revealMe
 				and "Your avatar and more of your name will show on the leaderboard."
@@ -10215,7 +10205,7 @@ function Tab:AddGradientCard(opts)
 	card.Size = UDim2.new(1, 0, 0, height)
 	card.ZIndex = Z.Content
 	card.Parent = self._page
-	Corner(card, NullUI.Theme.CornerRadiusSm)
+	Corner(card, VVindUI.Theme.CornerRadiusSm)
  
 	local gradient = Instance.new("UIGradient")
 	gradient.Color = ColorSequence.new(colorA, colorB)
@@ -10229,7 +10219,7 @@ function Tab:AddGradientCard(opts)
  
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.BackgroundTransparency = 1
-	titleLabel.FontFace = NullUI.Theme.Font
+	titleLabel.FontFace = VVindUI.Theme.Font
 	titleLabel.Text = title
 	titleLabel.TextColor3 = Color3.new(1, 1, 1)
 	titleLabel.TextSize = 14
@@ -10243,7 +10233,7 @@ function Tab:AddGradientCard(opts)
 	if hasDesc then
 		local descLabel = Instance.new("TextLabel")
 		descLabel.BackgroundTransparency = 1
-		descLabel.FontFace = NullUI.Theme.FontRegular
+		descLabel.FontFace = VVindUI.Theme.FontRegular
 		descLabel.Text = opts.Description
 		descLabel.TextColor3 = Color3.new(1, 1, 1)
 		descLabel.TextTransparency = 0.3
@@ -10276,7 +10266,7 @@ function Tab:AddGradientCard(opts)
 		veil.Size = UDim2.fromScale(1, 1)
 		veil.ZIndex = Z.Content + 2
 		veil.Parent = card
-		Corner(veil, NullUI.Theme.CornerRadiusSm)
+		Corner(veil, VVindUI.Theme.CornerRadiusSm)
  
 		local click = Instance.new("TextButton")
 		click.Text = ""
@@ -10471,9 +10461,9 @@ function Tab:AddSlider(opts)
  
 	local label = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
-	label.FontFace = NullUI.Theme.Font
+	label.FontFace = VVindUI.Theme.Font
 	label.Text = opts.Text or "Slider"
-	label.TextColor3 = NullUI.Theme.Text
+	label.TextColor3 = VVindUI.Theme.Text
 	label.TextSize = 14
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.TextTruncate = Enum.TextTruncate.AtEnd
@@ -10487,9 +10477,9 @@ function Tab:AddSlider(opts)
 	if hasDesc then
 		descLabel = Instance.new("TextLabel")
 		descLabel.BackgroundTransparency = 1
-		descLabel.FontFace = NullUI.Theme.FontRegular
+		descLabel.FontFace = VVindUI.Theme.FontRegular
 		descLabel.Text = opts.Description
-		descLabel.TextColor3 = NullUI.Theme.TextDim
+		descLabel.TextColor3 = VVindUI.Theme.TextDim
 		descLabel.TextSize = 12
 		descLabel.TextWrapped = true
 		descLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -10503,9 +10493,9 @@ function Tab:AddSlider(opts)
  
 	local valueLabel = Instance.new("TextLabel")
 	valueLabel.BackgroundTransparency = 1
-	valueLabel.FontFace = NullUI.Theme.FontRegular
+	valueLabel.FontFace = VVindUI.Theme.FontRegular
 	valueLabel.Text = FormatNumber(value) .. (opts.Suffix or "")
-	valueLabel.TextColor3 = NullUI.Theme.TextDim
+	valueLabel.TextColor3 = VVindUI.Theme.TextDim
 	valueLabel.TextSize = 13
 	valueLabel.TextXAlignment = Enum.TextXAlignment.Right
 	valueLabel.AnchorPoint = Vector2.new(1, 0)
@@ -10783,9 +10773,9 @@ function Tab:AddDropdown(opts)
  
 	local valueLabel = Instance.new("TextLabel")
 	valueLabel.BackgroundTransparency = 1
-	valueLabel.FontFace = NullUI.Theme.FontRegular
+	valueLabel.FontFace = VVindUI.Theme.FontRegular
 	valueLabel.Text = formatValue()
-	valueLabel.TextColor3 = NullUI.Theme.TextDim
+	valueLabel.TextColor3 = VVindUI.Theme.TextDim
 	valueLabel.TextSize = 13
 	valueLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	valueLabel.TextXAlignment = Enum.TextXAlignment.Right
@@ -10798,7 +10788,7 @@ function Tab:AddDropdown(opts)
 	local chevron = Instance.new("ImageLabel")
 	chevron.BackgroundTransparency = 1
 	chevron.Image = ResolveIcon("chevron-down")
-	chevron.ImageColor3 = NullUI.Theme.TextDim
+	chevron.ImageColor3 = VVindUI.Theme.TextDim
 	chevron.Size = UDim2.fromOffset(14, 14)
 	chevron.AnchorPoint = Vector2.new(1, 0.5)
 	chevron.Position = UDim2.new(1, -14, 0.5, 0)
@@ -10844,7 +10834,7 @@ function Tab:AddDropdown(opts)
 		if not entry then return end
 		local sel = isOptionSelected(name)
 		Tween(entry.button, { BackgroundTransparency = sel and 0.9 or 1 }, 0.1)
-		Tween(entry.label, { TextColor3 = sel and NullUI.Theme.Text or NullUI.Theme.TextDim }, 0.1)
+		Tween(entry.label, { TextColor3 = sel and VVindUI.Theme.Text or VVindUI.Theme.TextDim }, 0.1)
 		if entry.check then
 			Tween(entry.check, { BackgroundTransparency = sel and 0.05 or 0.9 }, 0.1)
 		end
@@ -10859,7 +10849,7 @@ function Tab:AddDropdown(opts)
 		RegisterPopupOpen(closePopup)
 		Tween(chevron, { Rotation = 180 }, 0.15)
  
-		local root = NullUI._Root
+		local root = VVindUI._Root
 		local mainWindow = self._window and self._window._gui or root
  
 		local rowH, padV = 30, 12
@@ -10878,7 +10868,7 @@ function Tab:AddDropdown(opts)
 		popupFrame = Instance.new("CanvasGroup")
 		popupFrame.Name = "DropdownPopup"
 		popupFrame.Active = true
-		popupFrame.BackgroundColor3 = NullUI.Theme.Background
+		popupFrame.BackgroundColor3 = VVindUI.Theme.Background
 		popupFrame.BackgroundTransparency = 1
 		popupFrame.BorderSizePixel = 0
 		popupFrame.ZIndex = Z.Popup
@@ -10935,9 +10925,9 @@ function Tab:AddDropdown(opts)
  
 			local optLabel = Instance.new("TextLabel")
 			optLabel.BackgroundTransparency = 1
-			optLabel.FontFace = NullUI.Theme.FontRegular
+			optLabel.FontFace = VVindUI.Theme.FontRegular
 			optLabel.Text = tostring(optionName)
-			optLabel.TextColor3 = isOptionSelected(optionName) and NullUI.Theme.Text or NullUI.Theme.TextDim
+			optLabel.TextColor3 = isOptionSelected(optionName) and VVindUI.Theme.Text or VVindUI.Theme.TextDim
 			optLabel.TextSize = 13
 			optLabel.TextXAlignment = Enum.TextXAlignment.Left
 			optLabel.TextTruncate = Enum.TextTruncate.AtEnd
@@ -10966,7 +10956,7 @@ function Tab:AddDropdown(opts)
 				checkIcon.Name = "Icon"
 				checkIcon.BackgroundTransparency = 1
 				checkIcon.Image = ResolveIcon("check")
-				checkIcon.ImageColor3 = NullUI.Theme.Background
+				checkIcon.ImageColor3 = VVindUI.Theme.Background
 				checkIcon.ImageTransparency = isOptionSelected(optionName) and 0 or 1
 				checkIcon.Size = UDim2.fromOffset(10, 10)
 				checkIcon.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -10981,7 +10971,7 @@ function Tab:AddDropdown(opts)
 				check.Name = "SingleCheck"
 				check.BackgroundTransparency = 1
 				check.Image = ResolveIcon("check")
-				check.ImageColor3 = NullUI.Theme.Text
+				check.ImageColor3 = VVindUI.Theme.Text
 				check.Size = UDim2.fromOffset(14, 14)
 				check.AnchorPoint = Vector2.new(1, 0.5)
 				check.Position = UDim2.new(1, -10, 0.5, 0)
@@ -11121,7 +11111,7 @@ function Tab:AddTextbox(opts)
 	local penIcon = Instance.new("ImageLabel")
 	penIcon.BackgroundTransparency = 1
 	penIcon.Image = ResolveIcon("pencil")
-	penIcon.ImageColor3 = NullUI.Theme.TextDim
+	penIcon.ImageColor3 = VVindUI.Theme.TextDim
 	penIcon.Size = UDim2.fromOffset(13, 13)
 	penIcon.AnchorPoint = Vector2.new(0, 0.5)
 	penIcon.Position = UDim2.new(0, 10, 0.5, 0)
@@ -11130,11 +11120,11 @@ function Tab:AddTextbox(opts)
  
 	local box = Instance.new("TextBox")
 	box.ClearTextOnFocus = false
-	box.FontFace = NullUI.Theme.FontRegular
+	box.FontFace = VVindUI.Theme.FontRegular
 	box.PlaceholderText = opts.Placeholder or ""
 	box.PlaceholderColor3 = Color3.fromRGB(120, 120, 122)
 	box.Text = opts.Default or ""
-	box.TextColor3 = NullUI.Theme.Text
+	box.TextColor3 = VVindUI.Theme.Text
 	box.TextSize = 13
 	box.TextXAlignment = Enum.TextXAlignment.Left
 	box.TextYAlignment = Enum.TextYAlignment.Center
@@ -11176,7 +11166,7 @@ function Tab:AddTextbox(opts)
 	task.defer(function() resizePill(false) end)
  
 	box.Focused:Connect(function()
-		Tween(pillStroke, { Color = NullUI.Theme.Accent, Transparency = 0.3 }, 0.15)
+		Tween(pillStroke, { Color = VVindUI.Theme.Accent, Transparency = 0.3 }, 0.15)
 		Tween(pill, { BackgroundTransparency = 0.82 }, 0.15)
 	end)
  
@@ -11216,9 +11206,9 @@ local function MiniField(parent, label, width, zBase)
  
 	local lbl = Instance.new("TextLabel")
 	lbl.BackgroundTransparency = 1
-	lbl.FontFace = NullUI.Theme.FontRegular
+	lbl.FontFace = VVindUI.Theme.FontRegular
 	lbl.Text = label
-	lbl.TextColor3 = NullUI.Theme.TextDim
+	lbl.TextColor3 = VVindUI.Theme.TextDim
 	lbl.TextSize = 11
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
 	lbl.Size = UDim2.new(1, 0, 0, 12)
@@ -11238,9 +11228,9 @@ local function MiniField(parent, label, width, zBase)
  
 	local box = Instance.new("TextBox")
 	box.ClearTextOnFocus = false
-	box.FontFace = NullUI.Theme.FontRegular
+	box.FontFace = VVindUI.Theme.FontRegular
 	box.Text = ""
-	box.TextColor3 = NullUI.Theme.Text
+	box.TextColor3 = VVindUI.Theme.Text
 	box.TextSize = 13
 	box.TextXAlignment = Enum.TextXAlignment.Center
 	box.TextYAlignment = Enum.TextYAlignment.Center
@@ -11250,7 +11240,7 @@ local function MiniField(parent, label, width, zBase)
 	box.Parent = field
  
 	box.Focused:Connect(function()
-		Tween(fieldStroke, { Color = NullUI.Theme.Accent, Transparency = 0.3 }, 0.15)
+		Tween(fieldStroke, { Color = VVindUI.Theme.Accent, Transparency = 0.3 }, 0.15)
 		Tween(field, { BackgroundTransparency = 0.84 }, 0.15)
 	end)
 	box.FocusLost:Connect(function()
@@ -11432,9 +11422,9 @@ function Tab:AddColorPicker(opts)
 		originalHue, originalSat, originalVal = hue, sat, val
 		lastFired = currentColor()
 		RegisterPopupOpen(closePopup)
-		Tween(swatchStroke, { Color = NullUI.Theme.Accent, Transparency = 0.3 }, 0.15)
+		Tween(swatchStroke, { Color = VVindUI.Theme.Accent, Transparency = 0.3 }, 0.15)
  
-		local root = NullUI._Root
+		local root = VVindUI._Root
 		local mainWindow = self._window and self._window._gui or root
 		local popupW, popupH = 208, math.min(290, math.max(1, (ViewportSize().Y - 16) / GetUIScale()))
  
@@ -11444,12 +11434,12 @@ function Tab:AddColorPicker(opts)
 		popupFrame.CanvasSize = UDim2.fromOffset(0, 290)
 		popupFrame.ScrollingDirection = Enum.ScrollingDirection.Y
 		popupFrame.ScrollBarThickness = 3
-		popupFrame.ScrollBarImageColor3 = NullUI.Theme.TextDim
+		popupFrame.ScrollBarImageColor3 = VVindUI.Theme.TextDim
 		popupFrame.ScrollBarImageTransparency = 0.35
 		popupFrame.BorderSizePixel = 0
 		popupFrame.Name = "ColorPickerPopup"
 		popupFrame.Active = true
-		popupFrame.BackgroundColor3 = NullUI.Theme.Background
+		popupFrame.BackgroundColor3 = VVindUI.Theme.Background
 		popupFrame.BackgroundTransparency = 1
 		popupFrame.BorderSizePixel = 0
 		popupFrame.ClipsDescendants = true
@@ -11607,20 +11597,20 @@ function Tab:AddColorPicker(opts)
 			local btn = Instance.new("TextButton")
 			btn.Position = UDim2.fromOffset(x, 0)
 			btn.Size = UDim2.fromOffset(w, 30)
-			btn.FontFace = NullUI.Theme.Font
+			btn.FontFace = VVindUI.Theme.Font
 			btn.Text = text
 			btn.TextSize = 13
 			btn.AutoButtonColor = false
 			btn.BorderSizePixel = 0
 			btn.ZIndex = Z.Popup + 2
 			if filled then
-				btn.BackgroundColor3 = NullUI.Theme.Accent
+				btn.BackgroundColor3 = VVindUI.Theme.Accent
 				btn.BackgroundTransparency = 0
-				btn.TextColor3 = NullUI.Theme.Background
+				btn.TextColor3 = VVindUI.Theme.Background
 			else
 				btn.BackgroundColor3 = Color3.new(1, 1, 1)
 				btn.BackgroundTransparency = 0.92
-				btn.TextColor3 = NullUI.Theme.Text
+				btn.TextColor3 = VVindUI.Theme.Text
 			end
 			btn.Parent = btnRow
 			Corner(btn, 8)
@@ -11764,7 +11754,7 @@ function Tab:AddKeybind(opts)
 	local keyIcon = Instance.new("ImageLabel")
 	keyIcon.BackgroundTransparency = 1
 	keyIcon.Image = ResolveIcon("keyboard")
-	keyIcon.ImageColor3 = NullUI.Theme.TextDim
+	keyIcon.ImageColor3 = VVindUI.Theme.TextDim
 	keyIcon.Size = UDim2.fromOffset(13, 13)
 	keyIcon.AnchorPoint = Vector2.new(0, 0.5)
 	keyIcon.Position = UDim2.new(0, 10, 0.5, 0)
@@ -11773,9 +11763,9 @@ function Tab:AddKeybind(opts)
  
 	local keyLabel = Instance.new("TextLabel")
 	keyLabel.BackgroundTransparency = 1
-	keyLabel.FontFace = NullUI.Theme.FontRegular
+	keyLabel.FontFace = VVindUI.Theme.FontRegular
 	keyLabel.Text = currentKey and currentKey.Name or "None"
-	keyLabel.TextColor3 = NullUI.Theme.Text
+	keyLabel.TextColor3 = VVindUI.Theme.Text
 	keyLabel.TextSize = 13
 	keyLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	keyLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -11814,7 +11804,7 @@ function Tab:AddKeybind(opts)
 		listening = true
 		KeybindCapturing = true
 		keyLabel.Text = "..."
-		Tween(pillStroke, { Color = NullUI.Theme.Accent, Transparency = 0.3 }, 0.15)
+		Tween(pillStroke, { Color = VVindUI.Theme.Accent, Transparency = 0.3 }, 0.15)
 		Tween(pill, { BackgroundTransparency = 0.82 }, 0.15)
  
 		listenConn = UserInputService.InputBegan:Connect(function(input)
@@ -11882,14 +11872,14 @@ function Tab:AddConsole(opts)
  
 	local container = Instance.new("Frame")
 	container.Name = "Console"
-	container.BackgroundColor3 = NullUI.Theme.Surface
+	container.BackgroundColor3 = VVindUI.Theme.Surface
 	container.BackgroundTransparency = 0.35
 	container.BorderSizePixel = 0
 	container.ClipsDescendants = true
 	container.Size = UDim2.new(1, 0, 0, height)
 	container.ZIndex = Z.Content
 	container.Parent = self._page
-	Corner(container, NullUI.Theme.CornerRadiusSm)
+	Corner(container, VVindUI.Theme.CornerRadiusSm)
 	Stroke(container, Color3.new(1, 1, 1), 1, 0.92)
  
 	local header = Instance.new("Frame")
@@ -11919,7 +11909,7 @@ function Tab:AddConsole(opts)
 	local titleIcon = Instance.new("ImageLabel")
 	titleIcon.BackgroundTransparency = 1
 	titleIcon.Image = ResolveIcon("terminal")
-	titleIcon.ImageColor3 = NullUI.Theme.TextDim
+	titleIcon.ImageColor3 = VVindUI.Theme.TextDim
 	titleIcon.Size = UDim2.fromOffset(14, 14)
 	titleIcon.LayoutOrder = 1
 	titleIcon.ZIndex = Z.Content + 3
@@ -11927,9 +11917,9 @@ function Tab:AddConsole(opts)
  
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.BackgroundTransparency = 1
-	titleLabel.FontFace = NullUI.Theme.Font
+	titleLabel.FontFace = VVindUI.Theme.Font
 	titleLabel.Text = opts.Title or "Debug Console"
-	titleLabel.TextColor3 = NullUI.Theme.Text
+	titleLabel.TextColor3 = VVindUI.Theme.Text
 	titleLabel.TextSize = 13
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
@@ -11970,7 +11960,7 @@ function Tab:AddConsole(opts)
 		local ic = Instance.new("ImageLabel")
 		ic.BackgroundTransparency = 1
 		ic.Image = ResolveIcon(icon)
-		ic.ImageColor3 = NullUI.Theme.TextDim
+		ic.ImageColor3 = VVindUI.Theme.TextDim
 		ic.Size = UDim2.fromOffset(13, 13)
 		ic.AnchorPoint = Vector2.new(0.5, 0.5)
 		ic.Position = UDim2.fromScale(0.5, 0.5)
@@ -11979,11 +11969,11 @@ function Tab:AddConsole(opts)
  
 		jan:Add(btn.MouseEnter:Connect(function()
 			Tween(btn, { BackgroundTransparency = 0.9 }, 0.12)
-			Tween(ic, { ImageColor3 = NullUI.Theme.Text }, 0.12)
+			Tween(ic, { ImageColor3 = VVindUI.Theme.Text }, 0.12)
 		end))
 		jan:Add(btn.MouseLeave:Connect(function()
 			Tween(btn, { BackgroundTransparency = 1 }, 0.12)
-			Tween(ic, { ImageColor3 = NullUI.Theme.TextDim }, 0.12)
+			Tween(ic, { ImageColor3 = VVindUI.Theme.TextDim }, 0.12)
 		end))
  
 		return btn, ic
@@ -12047,7 +12037,7 @@ function Tab:AddConsole(opts)
 	local emptyIcon = Instance.new("ImageLabel")
 	emptyIcon.BackgroundTransparency = 1
 	emptyIcon.Image = ResolveIcon("frown")
-	emptyIcon.ImageColor3 = NullUI.Theme.TextDim
+	emptyIcon.ImageColor3 = VVindUI.Theme.TextDim
 	emptyIcon.Size = UDim2.fromOffset(22, 22)
 	emptyIcon.LayoutOrder = 1
 	emptyIcon.ZIndex = Z.Content + 3
@@ -12055,9 +12045,9 @@ function Tab:AddConsole(opts)
  
 	local emptyLabel = Instance.new("TextLabel")
 	emptyLabel.BackgroundTransparency = 1
-	emptyLabel.FontFace = NullUI.Theme.FontRegular
+	emptyLabel.FontFace = VVindUI.Theme.FontRegular
 	emptyLabel.Text = "No logs at the moment"
-	emptyLabel.TextColor3 = NullUI.Theme.TextDim
+	emptyLabel.TextColor3 = VVindUI.Theme.TextDim
 	emptyLabel.TextSize = 12
 	emptyLabel.AutomaticSize = Enum.AutomaticSize.XY
 	emptyLabel.Size = UDim2.fromOffset(0, 14)
@@ -12092,13 +12082,13 @@ function Tab:AddConsole(opts)
 		trimLogs()
  
 		counter = counter + 1
-		local color = ConsoleColors[messageType] or NullUI.Theme.Text
+		local color = ConsoleColors[messageType] or VVindUI.Theme.Text
  
 		local entry = Instance.new("TextLabel")
 		entry.Name = "Entry"
 		entry.BackgroundTransparency = 1
 		entry.RichText = true
-		entry.FontFace = NullUI.Theme.FontRegular
+		entry.FontFace = VVindUI.Theme.FontRegular
 		entry.TextSize = 12
 		entry.TextWrapped = true
 		entry.TextXAlignment = Enum.TextXAlignment.Left
@@ -12110,7 +12100,7 @@ function Tab:AddConsole(opts)
 		entry.ZIndex = Z.Content + 2
 		entry.Text = string.format(
 			'<font color="#%s" transparency="0.45">[%s]</font> <font color="#%s">%s</font>',
-			NullUI.Theme.TextDim:ToHex(), os.date("%H:%M:%S"),
+			VVindUI.Theme.TextDim:ToHex(), os.date("%H:%M:%S"),
 			color:ToHex(), escapeRich(message)
 		)
 		entry.Parent = logsScroll
@@ -12150,7 +12140,7 @@ function Tab:AddConsole(opts)
 		Tween(copyIcon, { ImageColor3 = Color3.fromRGB(120, 220, 140) }, 0.1)
 		task.delay(0.4, function()
 			if copyIcon.Parent then
-				Tween(copyIcon, { ImageColor3 = NullUI.Theme.TextDim }, 0.15)
+				Tween(copyIcon, { ImageColor3 = VVindUI.Theme.TextDim }, 0.15)
 			end
 		end)
 	end)
@@ -12219,22 +12209,22 @@ function Tab:AddTable(opts)
  
 	local container = Instance.new("Frame")
 	container.Name = "Table"
-	container.BackgroundColor3 = NullUI.Theme.Surface
+	container.BackgroundColor3 = VVindUI.Theme.Surface
 	container.BackgroundTransparency = 0.35
 	container.BorderSizePixel = 0
 	container.ClipsDescendants = true
 	container.Size = UDim2.new(1, 0, 0, totalHeight)
 	container.ZIndex = Z.Content
 	container.Parent = self._page
-	Corner(container, NullUI.Theme.CornerRadiusSm)
+	Corner(container, VVindUI.Theme.CornerRadiusSm)
 	Stroke(container, Color3.new(1, 1, 1), 1, 0.92)
 	self._window:_RegisterSearchable(self, title, container)
  
 	local titleLabel = Instance.new("TextLabel")
 	titleLabel.BackgroundTransparency = 1
-	titleLabel.FontFace = NullUI.Theme.Font
+	titleLabel.FontFace = VVindUI.Theme.Font
 	titleLabel.Text = title
-	titleLabel.TextColor3 = NullUI.Theme.Text
+	titleLabel.TextColor3 = VVindUI.Theme.Text
 	titleLabel.TextSize = 14
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
@@ -12246,9 +12236,9 @@ function Tab:AddTable(opts)
 	if hasDesc then
 		local descLabel = Instance.new("TextLabel")
 		descLabel.BackgroundTransparency = 1
-		descLabel.FontFace = NullUI.Theme.FontRegular
+		descLabel.FontFace = VVindUI.Theme.FontRegular
 		descLabel.Text = opts.Description
-		descLabel.TextColor3 = NullUI.Theme.TextDim
+		descLabel.TextColor3 = VVindUI.Theme.TextDim
 		descLabel.TextSize = 12
 		descLabel.TextWrapped = true
 		descLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -12286,9 +12276,9 @@ function Tab:AddTable(opts)
  
 		local lbl = Instance.new("TextLabel")
 		lbl.BackgroundTransparency = 1
-		lbl.FontFace = NullUI.Theme.Font
+		lbl.FontFace = VVindUI.Theme.Font
 		lbl.Text = tostring(col.Label or col.Key or "")
-		lbl.TextColor3 = NullUI.Theme.TextDim
+		lbl.TextColor3 = VVindUI.Theme.TextDim
 		lbl.TextSize = 12
 		lbl.TextXAlignment = colAlign(col)
 		lbl.TextTruncate = Enum.TextTruncate.AtEnd
@@ -12300,10 +12290,10 @@ function Tab:AddTable(opts)
  
 		if sortable then
 			cellBtn.MouseEnter:Connect(function()
-				if sortState.Key ~= col.Key then Tween(lbl, { TextColor3 = NullUI.Theme.Text }, 0.12) end
+				if sortState.Key ~= col.Key then Tween(lbl, { TextColor3 = VVindUI.Theme.Text }, 0.12) end
 			end)
 			cellBtn.MouseLeave:Connect(function()
-				if sortState.Key ~= col.Key then Tween(lbl, { TextColor3 = NullUI.Theme.TextDim }, 0.12) end
+				if sortState.Key ~= col.Key then Tween(lbl, { TextColor3 = VVindUI.Theme.TextDim }, 0.12) end
 			end)
 		end
 	end
@@ -12344,9 +12334,9 @@ function Tab:AddTable(opts)
  
 	local emptyLabel = Instance.new("TextLabel")
 	emptyLabel.BackgroundTransparency = 1
-	emptyLabel.FontFace = NullUI.Theme.FontRegular
+	emptyLabel.FontFace = VVindUI.Theme.FontRegular
 	emptyLabel.Text = "No rows"
-	emptyLabel.TextColor3 = NullUI.Theme.TextDim
+	emptyLabel.TextColor3 = VVindUI.Theme.TextDim
 	emptyLabel.TextSize = 12
 	emptyLabel.Position = UDim2.fromOffset(PAD, scrollY + 10)
 	emptyLabel.Size = UDim2.new(1, -PAD * 2, 0, 16)
@@ -12383,9 +12373,9 @@ function Tab:AddTable(opts)
 				local cell = Instance.new("TextLabel")
 				cell.Name = "Cell" .. ci
 				cell.BackgroundTransparency = 1
-				cell.FontFace = NullUI.Theme.FontRegular
+				cell.FontFace = VVindUI.Theme.FontRegular
 				cell.Text = tostring(row[col.Key] == nil and "" or row[col.Key])
-				cell.TextColor3 = NullUI.Theme.Text
+				cell.TextColor3 = VVindUI.Theme.Text
 				cell.TextSize = 12
 				cell.TextXAlignment = colAlign(col)
 				cell.TextTruncate = Enum.TextTruncate.AtEnd
@@ -12434,7 +12424,7 @@ function Tab:AddTable(opts)
 						local arrow = ""
 						if key == sortState.Key then arrow = sortState.Asc and "  \226\150\178" or "  \226\150\188" end
 						info.Lbl.Text = info.Text .. arrow
-						info.Lbl.TextColor3 = (key == sortState.Key) and NullUI.Theme.Text or NullUI.Theme.TextDim
+						info.Lbl.TextColor3 = (key == sortState.Key) and VVindUI.Theme.Text or VVindUI.Theme.TextDim
 					end
 					applySort()
 				end)
@@ -12518,7 +12508,7 @@ function Tab:AddCardGrid(opts)
 	outer.Size = UDim2.new(1, 0, 0, height)
 	outer.ZIndex = Z.Content
 	outer.Parent = self._page
-	Corner(outer, NullUI.Theme.CornerRadiusSm)
+	Corner(outer, VVindUI.Theme.CornerRadiusSm)
 	Stroke(outer, Color3.new(1, 1, 1), 1, 0.95)
 	self._window:_RegisterSearchable(self, opts.Title or "Cards", outer)
  
@@ -12561,7 +12551,7 @@ function Tab:AddCardGrid(opts)
 		local searchIcon = Instance.new("ImageLabel")
 		searchIcon.BackgroundTransparency = 1
 		searchIcon.Image = ResolveIcon("search")
-		searchIcon.ImageColor3 = NullUI.Theme.TextDim
+		searchIcon.ImageColor3 = VVindUI.Theme.TextDim
 		searchIcon.Size = UDim2.fromOffset(13, 13)
 		searchIcon.AnchorPoint = Vector2.new(0, 0.5)
 		searchIcon.Position = UDim2.new(0, 10, 0.5, 0)
@@ -12570,11 +12560,11 @@ function Tab:AddCardGrid(opts)
  
 		searchBox = Instance.new("TextBox")
 		searchBox.ClearTextOnFocus = false
-		searchBox.FontFace = NullUI.Theme.FontRegular
+		searchBox.FontFace = VVindUI.Theme.FontRegular
 		searchBox.PlaceholderText = opts.SearchPlaceholder or "Search by name / tags..."
 		searchBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 122)
 		searchBox.Text = ""
-		searchBox.TextColor3 = NullUI.Theme.Text
+		searchBox.TextColor3 = VVindUI.Theme.Text
 		searchBox.TextSize = 13
 		searchBox.TextXAlignment = Enum.TextXAlignment.Left
 		searchBox.TextYAlignment = Enum.TextYAlignment.Center
@@ -12586,7 +12576,7 @@ function Tab:AddCardGrid(opts)
 		searchBox.Parent = searchPill
  
 		searchBox.Focused:Connect(function()
-			Tween(searchStroke, { Color = NullUI.Theme.Accent, Transparency = 0.3 }, 0.15)
+			Tween(searchStroke, { Color = VVindUI.Theme.Accent, Transparency = 0.3 }, 0.15)
 		end)
 		searchBox.FocusLost:Connect(function()
 			Tween(searchStroke, { Color = Color3.new(1, 1, 1), Transparency = 0.88 }, 0.15)
@@ -12630,9 +12620,9 @@ function Tab:AddCardGrid(opts)
  
 			local lbl = Instance.new("TextLabel")
 			lbl.BackgroundTransparency = 1
-			lbl.FontFace = NullUI.Theme.Font
+			lbl.FontFace = VVindUI.Theme.Font
 			lbl.Text = string.upper(sortName)
-			lbl.TextColor3 = (sortName == currentSort) and NullUI.Theme.Text or NullUI.Theme.TextDim
+			lbl.TextColor3 = (sortName == currentSort) and VVindUI.Theme.Text or VVindUI.Theme.TextDim
 			lbl.TextSize = 11
 			lbl.AutomaticSize = Enum.AutomaticSize.X
 			lbl.Size = UDim2.fromOffset(0, TABS_H)
@@ -12654,7 +12644,7 @@ function Tab:AddCardGrid(opts)
 	gridScroll.ElasticBehavior = Enum.ElasticBehavior.Never
 	gridScroll.VerticalScrollBarInset = Enum.ScrollBarInset.ScrollBar
 	gridScroll.ScrollBarThickness = showNativeScrollbar and (opts.ScrollBarThickness or 4) or 0
-	gridScroll.ScrollBarImageColor3 = NullUI.Theme.TextDim
+	gridScroll.ScrollBarImageColor3 = VVindUI.Theme.TextDim
 	gridScroll.ScrollBarImageTransparency = 0.35
 	gridScroll.AutomaticCanvasSize = Enum.AutomaticSize.None
 	gridScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
@@ -12758,7 +12748,7 @@ function Tab:AddCardGrid(opts)
  
 	local statusIcon = Instance.new("ImageLabel")
 	statusIcon.BackgroundTransparency = 1
-	statusIcon.ImageColor3 = NullUI.Theme.TextDim
+	statusIcon.ImageColor3 = VVindUI.Theme.TextDim
 	statusIcon.Size = UDim2.fromOffset(24, 24)
 	statusIcon.LayoutOrder = 1
 	statusIcon.Visible = false
@@ -12767,8 +12757,8 @@ function Tab:AddCardGrid(opts)
  
 	local statusLabel = Instance.new("TextLabel")
 	statusLabel.BackgroundTransparency = 1
-	statusLabel.FontFace = NullUI.Theme.FontRegular
-	statusLabel.TextColor3 = NullUI.Theme.TextDim
+	statusLabel.FontFace = VVindUI.Theme.FontRegular
+	statusLabel.TextColor3 = VVindUI.Theme.TextDim
 	statusLabel.TextSize = 12
 	statusLabel.TextWrapped = true
 	statusLabel.TextXAlignment = Enum.TextXAlignment.Center
@@ -12807,13 +12797,13 @@ function Tab:AddCardGrid(opts)
 		popup = Instance.new("CanvasGroup")
 		popup.Name = "CardActionsPopup"
 		popup.Active = true
-		popup.BackgroundColor3 = NullUI.Theme.Background
+		popup.BackgroundColor3 = VVindUI.Theme.Background
 		popup.BackgroundTransparency = 0.04
 		popup.BorderSizePixel = 0
 		popup.Position = UDim2.fromOffset(math.round(px), math.round(py))
 		popup.Size = UDim2.fromOffset(popupW, popupH)
 		popup.ZIndex = Z.Popup
-		popup.Parent = NullUI._Root
+		popup.Parent = VVindUI._Root
 		Corner(popup, 10)
 		Stroke(popup, Color3.new(1, 1, 1), 1, 0.9)
 		GlassLayer(popup, 10, 0.985)
@@ -12854,7 +12844,7 @@ function Tab:AddCardGrid(opts)
 			local icon = Instance.new("ImageLabel")
 			icon.BackgroundTransparency = 1
 			icon.Image = ResolveIcon(action.Icon or "circle")
-			icon.ImageColor3 = action.Danger and NullUI.Theme.Danger or NullUI.Theme.TextDim
+			icon.ImageColor3 = action.Danger and VVindUI.Theme.Danger or VVindUI.Theme.TextDim
 			icon.Size = UDim2.fromOffset(14, 14)
 			icon.AnchorPoint = Vector2.new(0, 0.5)
 			icon.Position = UDim2.new(0, 9, 0.5, 0)
@@ -12863,9 +12853,9 @@ function Tab:AddCardGrid(opts)
  
 			local label = Instance.new("TextLabel")
 			label.BackgroundTransparency = 1
-			label.FontFace = NullUI.Theme.FontRegular
+			label.FontFace = VVindUI.Theme.FontRegular
 			label.Text = tostring(action.Text or "Action")
-			label.TextColor3 = action.Danger and NullUI.Theme.Danger or NullUI.Theme.Text
+			label.TextColor3 = action.Danger and VVindUI.Theme.Danger or VVindUI.Theme.Text
 			label.TextSize = 12
 			label.TextXAlignment = Enum.TextXAlignment.Left
 			label.Position = UDim2.fromOffset(31, 0)
@@ -12895,7 +12885,7 @@ function Tab:AddCardGrid(opts)
 		cell.ClipsDescendants = true
 		cell.ZIndex = Z.Content + 2
 		cell.Parent = gridScroll
-		Corner(cell, NullUI.Theme.CornerRadiusSm)
+		Corner(cell, VVindUI.Theme.CornerRadiusSm)
 		local cellStroke = Stroke(cell, Color3.new(1, 1, 1), 1, 1)
  
 		local cellScale = Instance.new("UIScale")
@@ -12931,7 +12921,7 @@ function Tab:AddCardGrid(opts)
 			local iconImg = Instance.new("ImageLabel")
 			iconImg.BackgroundTransparency = 1
 			iconImg.Image = ResolveIcon(item.Icon)
-			iconImg.ImageColor3 = NullUI.Theme.Accent
+			iconImg.ImageColor3 = VVindUI.Theme.Accent
 			iconImg.Size = UDim2.fromOffset(13, 13)
 			iconImg.AnchorPoint = Vector2.new(0.5, 0.5)
 			iconImg.Position = UDim2.fromScale(0.5, 0.5)
@@ -12951,7 +12941,7 @@ function Tab:AddCardGrid(opts)
  
 			local actionBadge = Instance.new("Frame")
 			actionBadge.Name = "LoadBadge"
-			actionBadge.BackgroundColor3 = NullUI.Theme.Accent
+			actionBadge.BackgroundColor3 = VVindUI.Theme.Accent
 			actionBadge.BackgroundTransparency = 0.8
 			actionBadge.BorderSizePixel = 0
 			actionBadge.AnchorPoint = Vector2.new(1, 0)
@@ -12964,7 +12954,7 @@ function Tab:AddCardGrid(opts)
 			local actionIcon = Instance.new("ImageLabel")
 			actionIcon.BackgroundTransparency = 1
 			actionIcon.Image = ResolveIcon(item.ActionIcon or "download")
-			actionIcon.ImageColor3 = NullUI.Theme.Accent
+			actionIcon.ImageColor3 = VVindUI.Theme.Accent
 			actionIcon.Size = UDim2.fromOffset(12, 12)
 			actionIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 			actionIcon.Position = UDim2.fromScale(0.5, 0.5)
@@ -12988,7 +12978,7 @@ function Tab:AddCardGrid(opts)
 			secondaryBadge.Name = "SecondaryActionBadge"
 			secondaryBadge.BackgroundColor3 = item.SecondaryDanger
 				and Color3.fromRGB(225, 76, 88)
-				or NullUI.Theme.Accent
+				or VVindUI.Theme.Accent
 			secondaryBadge.BackgroundTransparency = item.SecondaryDanger and 0.82 or 0.8
 			secondaryBadge.BorderSizePixel = 0
 			secondaryBadge.AnchorPoint = Vector2.new(1, 0)
@@ -13003,7 +12993,7 @@ function Tab:AddCardGrid(opts)
 			secondaryIcon.Image = ResolveIcon(item.SecondaryIcon or "trash-2")
 			secondaryIcon.ImageColor3 = item.SecondaryDanger
 				and Color3.fromRGB(255, 125, 135)
-				or NullUI.Theme.Accent
+				or VVindUI.Theme.Accent
 			secondaryIcon.Size = UDim2.fromOffset(12, 12)
 			secondaryIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 			secondaryIcon.Position = UDim2.fromScale(0.5, 0.5)
@@ -13025,7 +13015,7 @@ function Tab:AddCardGrid(opts)
 		if hasMenuAction then
 			local menuBadge = Instance.new("Frame")
 			menuBadge.Name = "MenuBadge"
-			menuBadge.BackgroundColor3 = NullUI.Theme.Accent
+			menuBadge.BackgroundColor3 = VVindUI.Theme.Accent
 			menuBadge.BackgroundTransparency = 0.8
 			menuBadge.BorderSizePixel = 0
 			menuBadge.AnchorPoint = Vector2.new(1, 0)
@@ -13043,7 +13033,7 @@ function Tab:AddCardGrid(opts)
 			local menuIcon = Instance.new("ImageLabel")
 			menuIcon.BackgroundTransparency = 1
 			menuIcon.Image = ResolveIcon("Lucide:settings")
-			menuIcon.ImageColor3 = NullUI.Theme.Accent
+			menuIcon.ImageColor3 = VVindUI.Theme.Accent
 			menuIcon.Size = UDim2.fromOffset(12, 12)
 			menuIcon.AnchorPoint = Vector2.new(0.5, 0.5)
 			menuIcon.Position = UDim2.fromScale(0.5, 0.5)
@@ -13066,9 +13056,9 @@ function Tab:AddCardGrid(opts)
  
 		local titleLbl = Instance.new("TextLabel")
 		titleLbl.BackgroundTransparency = 1
-		titleLbl.FontFace = NullUI.Theme.Font
+		titleLbl.FontFace = VVindUI.Theme.Font
 		titleLbl.Text = item.Title or "Untitled"
-		titleLbl.TextColor3 = NullUI.Theme.Text
+		titleLbl.TextColor3 = VVindUI.Theme.Text
 		titleLbl.TextSize = 13
 		titleLbl.TextXAlignment = Enum.TextXAlignment.Left
 		titleLbl.TextYAlignment = Enum.TextYAlignment.Center
@@ -13083,9 +13073,9 @@ function Tab:AddCardGrid(opts)
  
 			local descLbl = Instance.new("TextLabel")
 			descLbl.BackgroundTransparency = 1
-			descLbl.FontFace = NullUI.Theme.FontRegular
+			descLbl.FontFace = VVindUI.Theme.FontRegular
 			descLbl.Text = item.Description
-			descLbl.TextColor3 = NullUI.Theme.TextDim
+			descLbl.TextColor3 = VVindUI.Theme.TextDim
 			descLbl.TextSize = 11
 			descLbl.TextWrapped = true
 			descLbl.TextTruncate = Enum.TextTruncate.None
@@ -13101,9 +13091,9 @@ function Tab:AddCardGrid(opts)
 		if item.Byline and item.Byline ~= "" then
 			local bylineLbl = Instance.new("TextLabel")
 			bylineLbl.BackgroundTransparency = 1
-			bylineLbl.FontFace = NullUI.Theme.FontRegular
+			bylineLbl.FontFace = VVindUI.Theme.FontRegular
 			bylineLbl.Text = item.Byline
-			bylineLbl.TextColor3 = NullUI.Theme.TextDim
+			bylineLbl.TextColor3 = VVindUI.Theme.TextDim
 			bylineLbl.TextTransparency = 0.25
 			bylineLbl.TextSize = 10
 			bylineLbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -13152,7 +13142,7 @@ function Tab:AddCardGrid(opts)
 				local statIcon = Instance.new("ImageLabel")
 				statIcon.BackgroundTransparency = 1
 				statIcon.Image = ResolveIcon(stat.Icon or "circle")
-				statIcon.ImageColor3 = NullUI.Theme.TextDim
+				statIcon.ImageColor3 = VVindUI.Theme.TextDim
 				statIcon.Size = UDim2.fromOffset(11, 11)
 				statIcon.LayoutOrder = 1
 				statIcon.ZIndex = Z.Content + 4
@@ -13160,9 +13150,9 @@ function Tab:AddCardGrid(opts)
  
 				local statLbl = Instance.new("TextLabel")
 				statLbl.BackgroundTransparency = 1
-				statLbl.FontFace = NullUI.Theme.FontRegular
+				statLbl.FontFace = VVindUI.Theme.FontRegular
 				statLbl.Text = tostring(stat.Text or "")
-				statLbl.TextColor3 = NullUI.Theme.TextDim
+				statLbl.TextColor3 = VVindUI.Theme.TextDim
 				statLbl.TextSize = 10
 				statLbl.AutomaticSize = Enum.AutomaticSize.X
 				statLbl.Size = UDim2.fromOffset(0, 12)
@@ -13172,12 +13162,12 @@ function Tab:AddCardGrid(opts)
  
 				if stat.Callback then
 					statFrame.MouseEnter:Connect(function()
-						Tween(statIcon, { ImageColor3 = NullUI.Theme.Accent }, 0.1)
-						Tween(statLbl, { TextColor3 = NullUI.Theme.Accent }, 0.1)
+						Tween(statIcon, { ImageColor3 = VVindUI.Theme.Accent }, 0.1)
+						Tween(statLbl, { TextColor3 = VVindUI.Theme.Accent }, 0.1)
 					end)
 					statFrame.MouseLeave:Connect(function()
-						Tween(statIcon, { ImageColor3 = NullUI.Theme.TextDim }, 0.1)
-						Tween(statLbl, { TextColor3 = NullUI.Theme.TextDim }, 0.1)
+						Tween(statIcon, { ImageColor3 = VVindUI.Theme.TextDim }, 0.1)
+						Tween(statLbl, { TextColor3 = VVindUI.Theme.TextDim }, 0.1)
 					end)
 					statFrame.MouseButton1Click:Connect(function()
 						task.spawn(stat.Callback)
@@ -13326,7 +13316,7 @@ function Tab:AddCardGrid(opts)
 			for otherName, otherEntry in pairs(sortButtons) do
 				local active = otherName == currentSort
 				Tween(otherEntry.Button, { BackgroundTransparency = active and 0.85 or 1 }, 0.12)
-				Tween(otherEntry.Label, { TextColor3 = active and NullUI.Theme.Text or NullUI.Theme.TextDim }, 0.12)
+				Tween(otherEntry.Label, { TextColor3 = active and VVindUI.Theme.Text or VVindUI.Theme.TextDim }, 0.12)
 			end
 			refresh()
 		end)
@@ -13352,7 +13342,7 @@ function Tab:AddCardGrid(opts)
 	}
 end
  
-function NullUI:GetConfig()
+function VVindUI:GetConfig()
 	local data = {}
 	local flags = {}
 	for flag in pairs(self.Flags) do table.insert(flags, flag) end
@@ -13373,7 +13363,7 @@ function NullUI:GetConfig()
 	return data
 end
  
-function NullUI:GetConfigJSON()
+function VVindUI:GetConfigJSON()
 	local data, err = self:GetConfig()
 	if not data then return nil, err end
 	local ok, encoded = pcall(function() return HttpService:JSONEncode(data) end)
@@ -13383,10 +13373,10 @@ end
 
 local function ResolveConfigFlag(flag)
 	local current, visited = flag, {}
-	while NullUI.FlagMigrations[current] do
+	while VVindUI.FlagMigrations[current] do
 		if visited[current] then return nil, "cyclic flag migration" end
 		visited[current] = true
-		current = NullUI.FlagMigrations[current]
+		current = VVindUI.FlagMigrations[current]
 	end
 	return current
 end
@@ -13443,7 +13433,7 @@ local function PrepareConfig(input)
 	table.sort(flags)
 	local staged = {}
 	for _, flag in ipairs(flags) do
-		local api = NullUI.Flags[flag]
+		local api = VVindUI.Flags[flag]
 		if not api or type(api.Set) ~= "function" then
 			table.insert(errors, flag .. ": unknown config flag")
 		else
@@ -13451,7 +13441,7 @@ local function PrepareConfig(input)
 			if not decodeOk then
 				table.insert(errors, flag .. ": value could not be decoded: " .. tostring(value))
 			else
-				local validator = NullUI.ConfigValidators[flag]
+				local validator = VVindUI.ConfigValidators[flag]
 				if type(validator) ~= "function" then
 					table.insert(errors, flag .. ": no validator is registered")
 				else
@@ -13471,7 +13461,7 @@ local function PrepareConfig(input)
 
 	local changes = {}
 	for _, entry in ipairs(staged) do
-		local api = NullUI.Flags[entry.Flag]
+		local api = VVindUI.Flags[entry.Flag]
 		local ok, current = pcall(api.Get, api)
 		if not ok then return false, entry.Flag .. ": getter failed: " .. tostring(current) end
 		if not ConfigValuesEqual(current, entry.Value) then
@@ -13481,7 +13471,7 @@ local function PrepareConfig(input)
 	return true, { Staged = staged, Changes = changes, Migrations = migrations, changes = changes, migrations = migrations }
 end
 
-function NullUI:PreviewConfig(data)
+function VVindUI:PreviewConfig(data)
 	local ok, prepared = PrepareConfig(data)
 	if not ok then return false, prepared end
 	return true, { Changes = prepared.Changes, Migrations = prepared.Migrations, changes = prepared.Changes, migrations = prepared.Migrations }
@@ -13491,7 +13481,7 @@ local function RollbackConfigValues(applied)
 	local errors = {}
 	for index = #applied, 1, -1 do
 		local prior = applied[index]
-		local priorApi = NullUI.Flags[prior.Flag]
+		local priorApi = VVindUI.Flags[prior.Flag]
 		if priorApi and type(priorApi.Set) == "function" then
 			local restored, restoreErr = pcall(priorApi.Set, priorApi, CopyConfigValue(prior.Value), true)
 			if not restored then table.insert(errors, prior.Flag .. ": " .. tostring(restoreErr)) end
@@ -13500,7 +13490,7 @@ local function RollbackConfigValues(applied)
 	return errors
 end
 
-function NullUI:SetConfig(data, silent)
+function VVindUI:SetConfig(data, silent)
 	local ok, prepared = PrepareConfig(data)
 	if not ok then return false, prepared end
 	local applied = {}
@@ -13534,11 +13524,11 @@ function NullUI:SetConfig(data, silent)
 	return true, prepared.Migrations
 end
 
-function NullUI:SetConfigJSON(configJson, silent)
+function VVindUI:SetConfigJSON(configJson, silent)
 	return self:SetConfig(configJson, silent)
 end
 
-function NullUI:RegisterFlagMigration(oldFlag, newFlag)
+function VVindUI:RegisterFlagMigration(oldFlag, newFlag)
 	assert(type(oldFlag) == "string" and oldFlag:gsub("%s", "") ~= "", "old flag must be a non-empty string")
 	assert(type(newFlag) == "string" and newFlag:gsub("%s", "") ~= "", "new flag must be a non-empty string")
 	assert(oldFlag ~= newFlag, "old and new flags must be different")
@@ -13556,9 +13546,9 @@ function NullUI:RegisterFlagMigration(oldFlag, newFlag)
 	return true
 end
  
-function NullUI:ListUIElements()
+function VVindUI:ListUIElements()
 	local out = {}
-	for flag, api in pairs(NullUI.Flags) do
+	for flag, api in pairs(VVindUI.Flags) do
 		local ok, value = pcall(api.Get)
 		table.insert(out, {
 			Flag  = flag,
@@ -13571,8 +13561,8 @@ function NullUI:ListUIElements()
 	return out
 end
  
-function NullUI:SetUIElementValue(flag, value, silent)
-	local api = NullUI.Flags[flag]
+function VVindUI:SetUIElementValue(flag, value, silent)
+	local api = VVindUI.Flags[flag]
 	if not api or not api.Set then
 		return false, "Unknown UI element: " .. tostring(flag)
 	end
@@ -13581,8 +13571,8 @@ function NullUI:SetUIElementValue(flag, value, silent)
 	return true
 end
  
-NullUI.ConfigFolder = "Randoms"
-NullUI.SettingsDirectory = STORAGE_FOLDER .. "/Settings/Randoms"
+VVindUI.ConfigFolder = "Randoms"
+VVindUI.SettingsDirectory = STORAGE_FOLDER .. "/Settings/Randoms"
 
 local function EnsureDirectory(path)
 	if not (fn_isfolder and fn_makefolder) then return false end
@@ -13596,7 +13586,7 @@ end
 local function EnsureSettingsDirectory()
 	return EnsureDirectory(STORAGE_FOLDER)
 		and EnsureDirectory(STORAGE_FOLDER .. "/Settings")
-		and EnsureDirectory(NullUI.SettingsDirectory)
+		and EnsureDirectory(VVindUI.SettingsDirectory)
 end
 
 local function SafeConfigName(name)
@@ -13624,7 +13614,7 @@ local function SafeSettingsFolder(name)
 end
 
 local function ConfigPath(name)
-	return NullUI.SettingsDirectory .. "/" .. SafeConfigName(name) .. ".cfg"
+	return VVindUI.SettingsDirectory .. "/" .. SafeConfigName(name) .. ".cfg"
 end
 
 local function ConfigMetadataPath(path)
@@ -13672,7 +13662,7 @@ local function ReadConfigFile(path, fallbackName)
 	return envelope, nil
 end
  
-function NullUI:SaveConfig(name, opts)
+function VVindUI:SaveConfig(name, opts)
 	if not fn_writefile then return false, "writefile unavailable" end
 	opts = opts or {}
 	name = SafeConfigName(name)
@@ -13704,13 +13694,13 @@ local function ReadNamedConfig(name)
 	return nil, "config does not exist"
 end
 
-function NullUI:LoadConfig(name, silent)
+function VVindUI:LoadConfig(name, silent)
 	local envelope, err = ReadNamedConfig(name or "config")
 	if not envelope then return false, err end
 	return self:SetConfig(envelope.Data, silent)
 end
  
-function NullUI:GetConfigMeta(name)
+function VVindUI:GetConfigMeta(name)
 	local envelope, err = ReadNamedConfig(name)
 	if not envelope then return nil, err end
 	return {
@@ -13721,16 +13711,16 @@ function NullUI:GetConfigMeta(name)
 	}
 end
  
-function NullUI:GetSavedConfig(name)
+function VVindUI:GetSavedConfig(name)
 	local envelope, err = ReadNamedConfig(name)
 	if not envelope then return nil, err end
 	return envelope, nil
 end
  
-function NullUI:ListConfigs()
+function VVindUI:ListConfigs()
 	if not fn_listfiles then return {}, "listfiles unavailable" end
 	EnsureSettingsDirectory()
-	local directories = { NullUI.SettingsDirectory }
+	local directories = { VVindUI.SettingsDirectory }
 	local out, seen = {}, {}
 	for _, directory in ipairs(directories) do
 		local ok, files = pcall(fn_listfiles, directory)
@@ -13761,7 +13751,7 @@ function NullUI:ListConfigs()
 	return out, nil
 end
  
-function NullUI:DeleteConfig(name)
+function VVindUI:DeleteConfig(name)
 	if not (fn_isfile and fn_delfile) then return false, "delfile unavailable" end
 	local removed, errors = false, {}
 	local paths = { ConfigPath(name), ConfigMetadataPath(ConfigPath(name)) }
@@ -13777,7 +13767,7 @@ function NullUI:DeleteConfig(name)
 	return true
 end
  
-function NullUI:RenameConfig(oldName, newName)
+function VVindUI:RenameConfig(oldName, newName)
 	local envelope, oldPath = ReadNamedConfig(oldName)
 	if not envelope then return false, oldPath end
 	local newSafeName = SafeConfigName(newName)
@@ -13808,18 +13798,18 @@ function NullUI:RenameConfig(oldName, newName)
 	return true
 end
  
-function NullUI:CreateSnapshot()
-	return { Data = NullUI:GetConfig(), CreatedAt = os.time() }
+function VVindUI:CreateSnapshot()
+	return { Data = VVindUI:GetConfig(), CreatedAt = os.time() }
 end
  
-function NullUI:RestoreSnapshot(snapshot, silent)
+function VVindUI:RestoreSnapshot(snapshot, silent)
 	if type(snapshot) ~= "table" or type(snapshot.Data) ~= "table" then
 		return false, "invalid snapshot"
 	end
-	return NullUI:SetConfig(snapshot.Data, silent)
+	return VVindUI:SetConfig(snapshot.Data, silent)
 end
 
-function NullUI:SetConfigFolder(name)
+function VVindUI:SetConfigFolder(name)
 	local previousDirectory = self.SettingsDirectory
 	self.ConfigFolder = SafeSettingsFolder(name)
 	self.SettingsDirectory = STORAGE_FOLDER .. "/Settings/" .. self.ConfigFolder
@@ -13837,10 +13827,10 @@ function NullUI:SetConfigFolder(name)
 end
 
 local function AutoConfigPath()
-	return NullUI.SettingsDirectory .. "/default_config.json"
+	return VVindUI.SettingsDirectory .. "/default_config.json"
 end
 
-function NullUI:LoadAutoConfig()
+function VVindUI:LoadAutoConfig()
 	local path = AutoConfigPath()
 	if self._AutoConfigCheckedPath == path then return false end
 	self._AutoConfigCheckedPath = path
@@ -13861,7 +13851,7 @@ function NullUI:LoadAutoConfig()
 	return true
 end
 
-function NullUI:ApplyAutoConfigFlag(flag)
+function VVindUI:ApplyAutoConfigFlag(flag)
 	local pending = self._AutoConfigPending
 	local api = self.Flags[flag]
 	if type(pending) ~= "table" or not api then return false end
@@ -13914,7 +13904,7 @@ function NullUI:ApplyAutoConfigFlag(flag)
 	return true
 end
 
-function NullUI:SaveAutoConfig()
+function VVindUI:SaveAutoConfig()
 	if not EnsureSettingsDirectory() then return false, "cannot create settings folder" end
 	local data, err = self:GetConfig()
 	if not data then return false, err end
@@ -13931,7 +13921,7 @@ function NullUI:SaveAutoConfig()
 	return true
 end
 
-function NullUI:QueueAutoConfigSave()
+function VVindUI:QueueAutoConfigSave()
 	if self._AutoConfigSaveScheduled then return end
 	self._AutoConfigSaveScheduled = true
 	local function save()
@@ -13944,28 +13934,25 @@ function NullUI:QueueAutoConfigSave()
 	if task and type(task.defer) == "function" then task.defer(save) else save() end
 end
 
-NullUI.get_config = NullUI.GetConfigJSON
-NullUI.preview_config = NullUI.PreviewConfig
-NullUI.load_config = NullUI.SetConfigJSON
-NullUI.register_flag_migration = NullUI.RegisterFlagMigration
-NullUI.load_auto_config = NullUI.LoadAutoConfig
-NullUI.save_auto_config = NullUI.SaveAutoConfig
+VVindUI.get_config = VVindUI.GetConfigJSON
+VVindUI.preview_config = VVindUI.PreviewConfig
+VVindUI.load_config = VVindUI.SetConfigJSON
+VVindUI.register_flag_migration = VVindUI.RegisterFlagMigration
+VVindUI.load_auto_config = VVindUI.LoadAutoConfig
+VVindUI.save_auto_config = VVindUI.SaveAutoConfig
  
 local CLOUD_IDENTITY_PATH = STORAGE_FOLDER .. "/cloud_identity.json"
-local LEGACY_CLOUD_IDENTITY_PATH = LEGACY_STORAGE_FOLDER .. "/cloud_identity.json"
  
 local function LoadCloudIdentity()
 	if fn_isfile and fn_readfile then
-		for _, path in ipairs({ CLOUD_IDENTITY_PATH, LEGACY_CLOUD_IDENTITY_PATH }) do
-			local existsOk, exists = pcall(fn_isfile, path)
-			if existsOk and exists then
-				local ok, raw = pcall(fn_readfile, path)
-				if ok then
-					local decodeOk, decoded = pcall(function() return HttpService:JSONDecode(raw) end)
-					if decodeOk and type(decoded) == "table" and decoded.Id then
-						decoded.Tokens = decoded.Tokens or {}
-						return decoded
-					end
+		local existsOk, exists = pcall(fn_isfile, CLOUD_IDENTITY_PATH)
+		if existsOk and exists then
+			local ok, raw = pcall(fn_readfile, CLOUD_IDENTITY_PATH)
+			if ok then
+				local decodeOk, decoded = pcall(function() return HttpService:JSONDecode(raw) end)
+				if decodeOk and type(decoded) == "table" and decoded.Id then
+					decoded.Tokens = decoded.Tokens or {}
+					return decoded
 				end
 			end
 		end
@@ -13990,7 +13977,7 @@ end
 local CLOUD_PUBLISH_COOLDOWN = 15
 local LastCloudPublishAt = 0
  
-function NullUI:CloudService(opts)
+function VVindUI:CloudService(opts)
 	opts = opts or {}
 	local baseUrl = opts.BaseUrl
 	local scriptId = opts.Script or "default"
@@ -14007,8 +13994,8 @@ function NullUI:CloudService(opts)
  
 		local headers = {
 			["Content-Type"] = "application/json",
-			["X-NullUI-Identity"] = identity.Id,
-			["X-NullUI-Script"] = scriptId,
+			["X-VVindUI-Identity"] = identity.Id,
+			["X-VVindUI-Script"] = scriptId,
 		}
 		if extraHeaders then
 			for k, v in pairs(extraHeaders) do headers[k] = v end
@@ -14075,18 +14062,18 @@ function NullUI:CloudService(opts)
 			)
 		end
  
-		local cleanName, nameBlocked = NullUI:SanitizeText(meta.Name, { MaxLength = 60 })
+		local cleanName, nameBlocked = VVindUI:SanitizeText(meta.Name, { MaxLength = 60 })
 		if nameBlocked or cleanName == "" then
 			return nil, "Name was empty or blocked by the content filter."
 		end
-		local cleanDesc, descBlocked = NullUI:SanitizeText(meta.Description or "", { MaxLength = 280 })
+		local cleanDesc, descBlocked = VVindUI:SanitizeText(meta.Description or "", { MaxLength = 280 })
 		if descBlocked then
 			return nil, "Description was blocked by the content filter."
 		end
  
 		local cleanTags = {}
 		for _, tag in ipairs(meta.Tags or {}) do
-			local cleanTag = NullUI:SanitizeText(tag, { MaxLength = 24 })
+			local cleanTag = VVindUI:SanitizeText(tag, { MaxLength = 24 })
 			if cleanTag ~= "" then table.insert(cleanTags, cleanTag) end
 			if #cleanTags >= 8 then break end
 		end
@@ -14097,7 +14084,7 @@ function NullUI:CloudService(opts)
 			Name = cleanName,
 			Description = cleanDesc,
 			Tags = cleanTags,
-			Data = data or NullUI:GetConfig(),
+			Data = data or VVindUI:GetConfig(),
 		})
 		if not decoded then return nil, err end
  
@@ -14114,7 +14101,7 @@ function NullUI:CloudService(opts)
 			return false, "You don't have publish rights for this config on this device."
 		end
 		local decoded, err = apiRequest("DELETE", "/configs/" .. id, nil, {
-			["X-NullUI-Owner-Token"] = token,
+			["X-VVindUI-Owner-Token"] = token,
 		})
 		if not decoded then return false, err end
 		identity.Tokens[id] = nil
@@ -14169,7 +14156,7 @@ function NullUI:CloudService(opts)
 	return api
 end
  
-function NullUI:CreateAIAssistant(opts)
+function VVindUI:CreateAIAssistant(opts)
 	opts = opts or {}
 	local providers = opts.Providers or {}
 	local tools = opts.Tools or (opts.Window and opts.Window:_BuildDefaultChatTools()) or {}
@@ -14196,23 +14183,19 @@ function NullUI:CreateAIAssistant(opts)
 	end
  
 	local persistPath = nil
-	local legacyPersistPath = nil
 	if opts.Persist then
 		local persistName = SafeConfigName(tostring(opts.Persist)) .. ".chat.json"
 		persistPath = ASSETS_FOLDER .. "/" .. persistName
-		legacyPersistPath = LEGACY_ASSETS_FOLDER .. "/" .. persistName
 	end
  
 	local function loadHistory()
 		if not (persistPath and fn_isfile and fn_readfile) then return nil end
-		for _, path in ipairs({ persistPath, legacyPersistPath }) do
-			local existsOk, exists = pcall(fn_isfile, path)
-			if existsOk and exists then
-				local ok, raw = pcall(fn_readfile, path)
-				if ok then
-					local decodeOk, decoded = pcall(function() return HttpService:JSONDecode(raw) end)
-					if decodeOk and type(decoded) == "table" then return decoded end
-				end
+		local existsOk, exists = pcall(fn_isfile, persistPath)
+		if existsOk and exists then
+			local ok, raw = pcall(fn_readfile, persistPath)
+			if ok then
+				local decodeOk, decoded = pcall(function() return HttpService:JSONDecode(raw) end)
+				if decodeOk and type(decoded) == "table" then return decoded end
 			end
 		end
 		return nil
@@ -14389,34 +14372,34 @@ function NullUI:CreateAIAssistant(opts)
 end
  
 local function DestroyAllWindowJanitors()
-	for _, win in ipairs(NullUI._Windows) do
+	for _, win in ipairs(VVindUI._Windows) do
 		win._destroyed = true
 		if win._janitor then win._janitor:Destroy() end
 	end
-	table.clear(NullUI._Windows)
+	table.clear(VVindUI._Windows)
 end
  
-NullUI._Root.Destroying:Connect(function()
+VVindUI._Root.Destroying:Connect(function()
 	AcrylicShuttingDown = true
 	DestroyAllWindowJanitors()
 	DestroyAllAcrylicControllers()
 	LibJanitor:Destroy()
 end)
  
-function NullUI:Unload()
+function VVindUI:Unload()
 	CloseAnyOpenPopup()
 	AcrylicShuttingDown = true
 	DestroyAllWindowJanitors()
 	DestroyAllAcrylicControllers()
 	LibJanitor:Destroy()
-	if NullUI._Root then NullUI._Root:Destroy() end
+	if VVindUI._Root then VVindUI._Root:Destroy() end
 end
  
 do
 	local globalTable = GetGlobalTable()
-	globalTable.__NullUI_Unload = function()
-		pcall(function() NullUI:Unload() end)
+	globalTable.__VVindUI_Unload = function()
+		pcall(function() VVindUI:Unload() end)
 	end
 end
  
-return NullUI
+return VVindUI
