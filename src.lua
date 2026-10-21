@@ -15,7 +15,7 @@ local IsMobileDevice = UserInputService.TouchEnabled and not UserInputService.Mo
  
 local VVindUI = {}
 VVindUI.__index = VVindUI
-VVindUI.Version = "2.8.1"
+VVindUI.Version = "2.10.0"
 VVindUI.Flags = {}
 VVindUI.ConfigFlags = {}
 VVindUI.ConfigValidators = {}
@@ -298,6 +298,15 @@ local function MakeSignal()
 		Clear = function()
 			table.clear(listeners)
 		end,
+	}
+end
+
+local ConfigLoadedSignal = MakeSignal()
+
+local function ChangeInfo(action)
+	return {
+		Source = VVindUI._ChangeSource or "user",
+		Action = action or "change",
 	}
 end
  
@@ -722,6 +731,8 @@ local Fonts = LoadFonts()
 VVindUI.Theme = {
 	Background     = Color3.fromRGB(16, 16, 16),
 	Surface        = Color3.fromRGB(24, 24, 24),
+	SurfaceHover   = Color3.fromRGB(33, 33, 35),
+	Border         = Color3.fromRGB(240, 240, 240),
 	Text           = Color3.fromRGB(240, 240, 240),
 	TextDim        = Color3.fromRGB(150, 150, 155),
 	Accent         = Color3.fromRGB(255, 255, 255),
@@ -774,7 +785,7 @@ end
  
 local function Stroke(parent, color, thickness, transparency)
 	local s = Instance.new("UIStroke")
-	s.Color = color or Color3.new(1, 1, 1)
+	s.Color = color or VVindUI.Theme.Border
 	s.Thickness = thickness or 1
 	s.Transparency = transparency or 0.9
 	s.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
@@ -786,13 +797,129 @@ local function GlassLayer(parent, radius, transparency)
 	local glass = Instance.new("Frame")
 	glass.Name = "Glass"
 	glass.Size = UDim2.fromScale(1, 1)
-	glass.BackgroundColor3 = Color3.new(1, 1, 1)
+	glass.BackgroundColor3 = VVindUI.Theme.Surface
 	glass.BackgroundTransparency = transparency or 0.985
 	glass.BorderSizePixel = 0
 	glass.ZIndex = Z.Glass
 	glass.Parent = parent
 	Corner(glass, radius)
 	return glass
+end
+
+local function SameColor(a, b)
+	return typeof(a) == "Color3" and typeof(b) == "Color3"
+		and a.R == b.R and a.G == b.G and a.B == b.B
+end
+
+local function IsNeutralColor(value)
+	return typeof(value) == "Color3"
+		and value.R > 0.05 and value.R <= 1
+		and math.abs(value.R - value.G) < 0.002
+		and math.abs(value.G - value.B) < 0.002
+end
+
+local function RecolorThemeValue(instance, property, value, oldTheme)
+	if typeof(value) ~= "Color3" then return nil end
+	if property == "StrokeColor" then
+		if SameColor(value, oldTheme.Accent) then return VVindUI.Theme.Accent end
+		if SameColor(value, oldTheme.Border) or IsNeutralColor(value) then
+			return VVindUI.Theme.Border
+		end
+	elseif property == "BackgroundColor3" then
+		if SameColor(value, oldTheme.Background) then return VVindUI.Theme.Background end
+		if SameColor(value, oldTheme.Surface) then return VVindUI.Theme.Surface end
+		if SameColor(value, oldTheme.SurfaceHover) then return VVindUI.Theme.SurfaceHover end
+		if SameColor(value, oldTheme.Accent) then return VVindUI.Theme.Accent end
+		if SameColor(value, oldTheme.Text) then return VVindUI.Theme.Text end
+		if SameColor(value, oldTheme.TextDim) then return VVindUI.Theme.Surface end
+		if IsNeutralColor(value) then
+			return value.R < 0.12 and VVindUI.Theme.Background or VVindUI.Theme.Surface
+		end
+	elseif property == "TextColor3" or property == "ImageColor3" then
+		if SameColor(value, oldTheme.Background) then return VVindUI.Theme.Background end
+		if SameColor(value, oldTheme.Surface) then return VVindUI.Theme.Surface end
+		if SameColor(value, oldTheme.SurfaceHover) then return VVindUI.Theme.TextDim end
+		if SameColor(value, oldTheme.Text) then return VVindUI.Theme.Text end
+		if SameColor(value, oldTheme.TextDim) then return VVindUI.Theme.TextDim end
+		if SameColor(value, oldTheme.Danger) then return VVindUI.Theme.Danger end
+		if SameColor(value, oldTheme.Accent) then return VVindUI.Theme.Accent end
+		if IsNeutralColor(value) then
+			return value.R >= 0.92 and VVindUI.Theme.Text or VVindUI.Theme.TextDim
+		end
+	elseif property == "GradientColor" then
+		if SameColor(value, oldTheme.Accent) then return VVindUI.Theme.Accent end
+		if SameColor(value, oldTheme.SurfaceHover) then return VVindUI.Theme.SurfaceHover end
+		if SameColor(value, oldTheme.Text) then return VVindUI.Theme.Text end
+		if SameColor(value, oldTheme.TextDim) then return VVindUI.Theme.TextDim end
+		if IsNeutralColor(value) then
+			return value.R >= 0.92 and VVindUI.Theme.Text or VVindUI.Theme.TextDim
+		end
+	end
+	return nil
+end
+
+function VVindUI:SetTheme(patch)
+	if type(patch) ~= "table" then return false, "theme must be a table" end
+	local oldTheme = table.clone(self.Theme)
+	for key, value in pairs(patch) do
+		local current = self.Theme[key]
+		if current == nil then return false, "unknown theme key: " .. tostring(key) end
+		if typeof(value) ~= typeof(current) then
+			return false, "theme key '" .. tostring(key) .. "' expects " .. typeof(current)
+		end
+		if type(value) == "number" and (value ~= value or value == math.huge or value == -math.huge or value < 0) then
+			return false, "theme key '" .. tostring(key) .. "' must be a finite non-negative number"
+		end
+	end
+	for key, value in pairs(patch) do self.Theme[key] = value end
+
+	local root = self._Root
+	if not root then return true end
+	local instances = { root }
+	for _, instance in ipairs(root:GetDescendants()) do table.insert(instances, instance) end
+	for _, instance in ipairs(instances) do
+		if instance:GetAttribute("VVindThemeExempt") then continue end
+		local colorExempt = instance:GetAttribute("VVindThemeColorExempt") == true
+		local colorProperties = {}
+		if not colorExempt then table.insert(colorProperties, "BackgroundColor3") end
+		if instance:IsA("TextLabel") or instance:IsA("TextButton") or instance:IsA("TextBox") then
+			if not colorExempt then table.insert(colorProperties, "TextColor3") end
+			local ok, value = pcall(function() return instance.FontFace end)
+			if ok then
+				if value == oldTheme.Font then instance.FontFace = self.Theme.Font
+				elseif value == oldTheme.FontRegular then instance.FontFace = self.Theme.FontRegular end
+			end
+		end
+		if not colorExempt and not instance:GetAttribute("VVindThemeImageColorExempt") and (instance:IsA("ImageLabel") or instance:IsA("ImageButton")) then table.insert(colorProperties, "ImageColor3") end
+		for _, property in ipairs(colorProperties) do
+			local ok, value = pcall(function() return instance[property] end)
+			if ok then
+				local color = RecolorThemeValue(instance, property, value, oldTheme)
+				if color then pcall(function() instance[property] = color end) end
+			end
+		end
+		if not colorExempt and instance:IsA("UIStroke") then
+			local color = RecolorThemeValue(instance, "StrokeColor", instance.Color, oldTheme)
+			if color then instance.Color = color end
+		elseif not colorExempt and instance:IsA("UIGradient") then
+			local keypoints = {}
+			for _, keypoint in ipairs(instance.Color.Keypoints) do
+				local color = RecolorThemeValue(instance, "GradientColor", keypoint.Value, oldTheme) or keypoint.Value
+				table.insert(keypoints, ColorSequenceKeypoint.new(keypoint.Time, color))
+			end
+			instance.Color = ColorSequence.new(keypoints)
+		elseif instance:IsA("UICorner") then
+			local radius = instance.CornerRadius
+			if radius.Scale == 0 and radius.Offset == oldTheme.CornerRadius then
+				instance.CornerRadius = UDim.new(0, self.Theme.CornerRadius)
+			elseif radius.Scale == 0 and radius.Offset == oldTheme.CornerRadiusSm then
+				instance.CornerRadius = UDim.new(0, self.Theme.CornerRadiusSm)
+			end
+		elseif instance:IsA("TextLabel") or instance:IsA("TextButton") or instance:IsA("TextBox") then
+			if instance.Font == oldTheme.MeasureFont then instance.Font = self.Theme.MeasureFont end
+		end
+	end
+	return true
 end
  
 local function AddScrollbar(scroll)
@@ -858,7 +985,7 @@ local MeasureCache = {}
 local function MeasureText(text, size, maxWidth)
 	text = tostring(text or "")
 	maxWidth = maxWidth or 10000
-	local key = text .. "\1" .. size .. "\1" .. math.floor(maxWidth)
+	local key = text .. "\1" .. size .. "\1" .. math.floor(maxWidth) .. "\1" .. tostring(VVindUI.Theme.MeasureFont)
 	local cached = MeasureCache[key]
 	if cached then return cached.X, cached.Y end
  
@@ -1076,6 +1203,106 @@ LibJanitor:Add(UserInputService.InputBegan:Connect(function(input, gameProcessed
 end))
  
 local KeybindCapturing = false
+local KeybindCaptureStop = nil
+local KeybindControls = {}
+local ActiveKeybindContext = "global"
+local KeybindInputHandlersInstalled = false
+
+local KeybindMouseAliases = {
+	m1 = Enum.UserInputType.MouseButton1, mouse1 = Enum.UserInputType.MouseButton1, mb1 = Enum.UserInputType.MouseButton1,
+	m2 = Enum.UserInputType.MouseButton2, mouse2 = Enum.UserInputType.MouseButton2, mb2 = Enum.UserInputType.MouseButton2,
+	m3 = Enum.UserInputType.MouseButton3, mouse3 = Enum.UserInputType.MouseButton3, mb3 = Enum.UserInputType.MouseButton3,
+}
+
+local function ResolveKeybindKey(value)
+	if value == nil or value == "" or value == "NONE" or value == "None" then return nil end
+	if typeof(value) == "EnumItem" then
+		if value.EnumType == Enum.KeyCode and value ~= Enum.KeyCode.Unknown then return value end
+		if value.EnumType == Enum.UserInputType and (value == Enum.UserInputType.MouseButton1
+			or value == Enum.UserInputType.MouseButton2 or value == Enum.UserInputType.MouseButton3) then
+			return value
+		end
+		return nil, "expected a keyboard/gamepad key or mouse button 1-3"
+	end
+	if type(value) ~= "string" then return nil, "expected an EnumItem, key name, or nil" end
+
+	local alias = KeybindMouseAliases[string.lower(value):gsub("%s", "")]
+	if alias then return alias end
+	local enumType, keyName = value:match("^Enum%.([%w_]+)%.([%w_]+)$")
+	if not enumType then enumType, keyName = value:match("^([%w_]+)%.([%w_]+)$") end
+	if not enumType then
+		keyName = value
+		enumType = keyName:match("^MouseButton[123]$") and "UserInputType" or "KeyCode"
+	end
+	local ok, key = pcall(function() return Enum[enumType][keyName] end)
+	if not ok or typeof(key) ~= "EnumItem" then return nil, "key is not a valid enum name" end
+	if key.EnumType == Enum.KeyCode and key ~= Enum.KeyCode.Unknown then return key end
+	if key.EnumType == Enum.UserInputType and (key == Enum.UserInputType.MouseButton1
+		or key == Enum.UserInputType.MouseButton2 or key == Enum.UserInputType.MouseButton3) then
+		return key
+	end
+	return nil, "expected a keyboard/gamepad key or mouse button 1-3"
+end
+
+local function KeybindInputKey(input)
+	local inputType = input.UserInputType
+	if inputType == Enum.UserInputType.Keyboard or string.find(inputType.Name, "Gamepad", 1, true) then
+		return input.KeyCode ~= Enum.KeyCode.Unknown and input.KeyCode or nil
+	end
+	if inputType == Enum.UserInputType.MouseButton1 or inputType == Enum.UserInputType.MouseButton2
+		or inputType == Enum.UserInputType.MouseButton3 then
+		return inputType
+	end
+	return nil
+end
+
+local function KeybindLabel(key)
+	if not key then return "None" end
+	if key.EnumType == Enum.UserInputType then
+		return ({
+			[Enum.UserInputType.MouseButton1] = "M1",
+			[Enum.UserInputType.MouseButton2] = "M2",
+			[Enum.UserInputType.MouseButton3] = "M3",
+		})[key] or key.Name
+	end
+	return ({
+		[Enum.KeyCode.LeftShift] = "LS", [Enum.KeyCode.RightShift] = "RS",
+		[Enum.KeyCode.LeftControl] = "LC", [Enum.KeyCode.RightControl] = "RC",
+		[Enum.KeyCode.LeftAlt] = "LA", [Enum.KeyCode.RightAlt] = "RA",
+		[Enum.KeyCode.Insert] = "INS", [Enum.KeyCode.Backspace] = "BS",
+		[Enum.KeyCode.Return] = "Ent", [Enum.KeyCode.Space] = "SPC",
+	})[key] or key.Name
+end
+
+local function KeybindContextActive(context)
+	return context == "global" or context == ActiveKeybindContext
+end
+
+local function KeybindContextsOverlap(first, second)
+	return first == "global" or second == "global" or first == second
+end
+
+local function KeybindConflicts(control, other)
+	return control ~= other and not control.destroyed and not other.destroyed
+		and control.mode ~= "Always" and other.mode ~= "Always"
+		and control.key ~= nil and control.key == other.key
+		and KeybindContextsOverlap(control.context, other.context)
+end
+
+local function RefreshKeybindConflicts()
+	for _, control in ipairs(KeybindControls) do
+		local conflict = false
+		for _, other in ipairs(KeybindControls) do
+			if KeybindConflicts(control, other) then conflict = true; break end
+		end
+		local stroke = control.stroke
+		if stroke and stroke.Parent then
+			stroke.Color = control.listening and VVindUI.Theme.Accent
+				or conflict and VVindUI.Theme.Danger or VVindUI.Theme.Border
+			stroke.Transparency = control.listening and 0.3 or conflict and 0.3 or 0.88
+		end
+	end
+end
  
 local NotificationQueue = {}
  
@@ -1180,7 +1407,7 @@ function VVindUI:Notify(opts)
 	card.Visible = false
 	card.Parent = holder
 	Corner(card, 12)
-	local stroke = Stroke(card, Color3.new(1, 1, 1), 1, 1)
+	local stroke = Stroke(card, VVindUI.Theme.Border, 1, 1)
 	local notificationAcrylic = nil
 	local scale = Instance.new("UIScale")
 	scale.Scale = 0.88
@@ -1320,7 +1547,7 @@ function VVindUI:Notify(opts)
 	end
  
 	local barHolder = Instance.new("Frame")
-	barHolder.BackgroundColor3 = Color3.new(1, 1, 1)
+	barHolder.BackgroundColor3 = VVindUI.Theme.Surface
 	barHolder.BackgroundTransparency = 1
 	barHolder.BorderSizePixel = 0
 	barHolder.Size = UDim2.new(1, 0, 0, 3)
@@ -1430,10 +1657,9 @@ function VVindUI:Confirm(opts)
 	local confirmText = opts.ConfirmText or "Confirm"
 	local cancelText  = opts.CancelText or "Cancel"
 	local danger      = opts.Danger == true
+	local ownerWindow = type(opts.Window) == "table" and opts.Window or nil
 	local anchorFrame = opts.Window
-	if type(anchorFrame) == "table" then
-		anchorFrame = anchorFrame._gui
-	end
+	if ownerWindow then anchorFrame = ownerWindow._gui end
  
 	local root = VVindUI._Root
 	local jan = Janitor.new()
@@ -1466,8 +1692,12 @@ function VVindUI:Confirm(opts)
 	dialog.Size = UDim2.new(0, 340, 0, 0)
 	dialog.ZIndex = Z.ModalTop
 	dialog.Parent = backdrop
+	if ownerWindow then
+		dialog:SetAttribute("VVindInterfacePanel", true)
+		dialog:SetAttribute("VVindWindowId", ownerWindow._id)
+	end
 	Corner(dialog, 16)
-	local dialogStroke = Stroke(dialog, Color3.new(1, 1, 1), 1, 1)
+	local dialogStroke = Stroke(dialog, VVindUI.Theme.Border, 1, 1)
  
 	local scale = Instance.new("UIScale")
 	scale.Scale = 0.9
@@ -1537,7 +1767,7 @@ function VVindUI:Confirm(opts)
 	rowLayout.Parent = buttonsRow
  
 	local function makeButton(text_, order, filled)
-		local tint = (filled and danger) and VVindUI.Theme.Danger or Color3.new(1, 1, 1)
+		local tint = (filled and danger) and VVindUI.Theme.Danger or VVindUI.Theme.Text
  
 		local btn = Instance.new("TextButton")
 		btn.Text = ""
@@ -1614,7 +1844,7 @@ function VVindUI:Confirm(opts)
 	end))
  
 	Tween(backdrop, { BackgroundTransparency = 0.5 }, 0.18)
-	Tween(dialog, { BackgroundTransparency = 0 }, 0.18)
+	Tween(dialog, { BackgroundTransparency = ownerWindow and ownerWindow._interfaceTransparency or 0 }, 0.18)
 	Tween(dialogStroke, { Transparency = 0.8 }, 0.18)
 	Tween(titleLabel, { TextTransparency = 0 }, 0.2)
 	if textLabel then Tween(textLabel, { TextTransparency = 0 }, 0.2) end
@@ -1631,10 +1861,9 @@ function VVindUI:Modal(opts)
 	local cancelText  = opts.CancelText or "Cancel"
 	local danger      = opts.Danger == true
 	local fields      = opts.Fields or {}
+	local ownerWindow = type(opts.Window) == "table" and opts.Window or nil
 	local anchorFrame = opts.Window
-	if type(anchorFrame) == "table" then
-		anchorFrame = anchorFrame._gui
-	end
+	if ownerWindow then anchorFrame = ownerWindow._gui end
  
 	local root = VVindUI._Root
 	local jan = Janitor.new()
@@ -1667,8 +1896,12 @@ function VVindUI:Modal(opts)
 	dialog.Size = UDim2.new(0, 360, 0, 0)
 	dialog.ZIndex = Z.ModalTop
 	dialog.Parent = backdrop
+	if ownerWindow then
+		dialog:SetAttribute("VVindInterfacePanel", true)
+		dialog:SetAttribute("VVindWindowId", ownerWindow._id)
+	end
 	Corner(dialog, 16)
-	local dialogStroke = Stroke(dialog, Color3.new(1, 1, 1), 1, 1)
+	local dialogStroke = Stroke(dialog, VVindUI.Theme.Border, 1, 1)
  
 	local scale = Instance.new("UIScale")
 	scale.Scale = 0.9
@@ -1768,7 +2001,7 @@ function VVindUI:Modal(opts)
 		end
  
 		local fieldFrame = Instance.new("Frame")
-		fieldFrame.BackgroundColor3 = Color3.new(1, 1, 1)
+		fieldFrame.BackgroundColor3 = VVindUI.Theme.Surface
 		fieldFrame.BackgroundTransparency = 0.93
 		fieldFrame.BorderSizePixel = 0
 		fieldFrame.Size = UDim2.new(1, 0, 0, boxH)
@@ -1776,7 +2009,7 @@ function VVindUI:Modal(opts)
 		fieldFrame.ZIndex = Z.ModalTop + 2
 		fieldFrame.Parent = holder
 		Corner(fieldFrame, 9)
-		local fieldStroke = Stroke(fieldFrame, Color3.new(1, 1, 1), 1, 0.88)
+		local fieldStroke = Stroke(fieldFrame, VVindUI.Theme.Border, 1, 0.88)
  
 		local fieldPad = Instance.new("UIPadding")
 		fieldPad.PaddingLeft = UDim.new(0, 10)
@@ -1789,7 +2022,7 @@ function VVindUI:Modal(opts)
 		box.MultiLine = isTextarea
 		box.FontFace = VVindUI.Theme.FontRegular
 		box.PlaceholderText = field.Placeholder or ""
-		box.PlaceholderColor3 = Color3.fromRGB(120, 120, 122)
+		box.PlaceholderColor3 = VVindUI.Theme.TextDim
 		box.Text = tostring(field.Default or "")
 		box.TextColor3 = VVindUI.Theme.Text
 		box.TextSize = 13
@@ -1815,7 +2048,7 @@ function VVindUI:Modal(opts)
 			Tween(fieldFrame, { BackgroundTransparency = 0.85 }, 0.15)
 		end))
 		jan:Add(box.FocusLost:Connect(function()
-			Tween(fieldStroke, { Color = Color3.new(1, 1, 1), Transparency = 0.88 }, 0.15)
+			Tween(fieldStroke, { Color = VVindUI.Theme.Border, Transparency = 0.88 }, 0.15)
 			Tween(fieldFrame, { BackgroundTransparency = 0.93 }, 0.15)
 		end))
  
@@ -1840,7 +2073,7 @@ function VVindUI:Modal(opts)
 	rowLayout.Parent = buttonsRow
  
 	local function makeButton(text_, order, filled)
-		local tint = (filled and danger) and VVindUI.Theme.Danger or Color3.new(1, 1, 1)
+		local tint = (filled and danger) and VVindUI.Theme.Danger or VVindUI.Theme.Text
  
 		local btn = Instance.new("TextButton")
 		btn.Text = ""
@@ -1934,7 +2167,7 @@ function VVindUI:Modal(opts)
 	end))
  
 	Tween(backdrop, { BackgroundTransparency = 0.5 }, 0.18)
-	Tween(dialog, { BackgroundTransparency = 0 }, 0.18)
+	Tween(dialog, { BackgroundTransparency = ownerWindow and ownerWindow._interfaceTransparency or 0 }, 0.18)
 	Tween(dialogStroke, { Transparency = 0.8 }, 0.18)
 	Tween(titleLabel, { TextTransparency = 0 }, 0.2)
 	if textLabel then Tween(textLabel, { TextTransparency = 0 }, 0.2) end
@@ -2118,15 +2351,31 @@ end
 local DRAG_THRESHOLD = 6
  
 local function BaseCard(parent, height)
+	local windowId, interfaceTransparency
+	local ancestor = parent
+	while ancestor and not windowId do
+		windowId = ancestor:GetAttribute("VVindWindowId")
+		ancestor = ancestor.Parent
+	end
+	if windowId then
+		for _, window in ipairs(VVindUI._Windows) do
+			if window._id == windowId then
+				interfaceTransparency = window._interfaceTransparency
+				break
+			end
+		end
+	end
 	local card = Instance.new("Frame")
-	card.BackgroundColor3 = Color3.new(1, 1, 1)
-	card.BackgroundTransparency = 0.96
+	card.BackgroundColor3 = VVindUI.Theme.Surface
+	card.BackgroundTransparency = interfaceTransparency or 0.96
 	card.BorderSizePixel = 0
 	card.Size = UDim2.new(1, 0, 0, height or 44)
 	card.ZIndex = Z.Content
 	card.Parent = parent
+	card:SetAttribute("VVindInterfacePanel", true)
+	if windowId then card:SetAttribute("VVindWindowId", windowId) end
 	Corner(card, VVindUI.Theme.CornerRadiusSm)
-	Stroke(card, Color3.new(1, 1, 1), 1, 0.95)
+	Stroke(card, VVindUI.Theme.Border, 1, 0.95)
 	return card
 end
  
@@ -2282,6 +2531,8 @@ Window.__index = Window
  
 local Tab = {}
 Tab.__index = Tab
+
+local NextWindowId = 0
  
 function VVindUI:CreateWindow(opts)
 	opts = opts or {}
@@ -2322,11 +2573,15 @@ function VVindUI:CreateWindow(opts)
 	Corner(shadow, 5)
 	jan:Add(shadow)
  
-	local main = Instance.new("Frame")
+	local main = Instance.new("ImageLabel")
 	main.Name = "Window"
 	main.AnchorPoint = Vector2.new(0.5, 0.5)
 	main.Position = windowPosition
 	main.Size = size
+	main.Image = type(opts.BackgroundImage) == "string" and opts.BackgroundImage or ""
+	main.ImageColor3 = Color3.new(1, 1, 1)
+	main.ImageTransparency = math.clamp(tonumber(opts.BackgroundImageTransparency) or 0, 0, 1)
+	main.ScaleType = Enum.ScaleType.Crop
 	main.BackgroundColor3 = VVindUI.Theme.Background
 	main.BackgroundTransparency = 1
 	main.BorderSizePixel = 0
@@ -2334,8 +2589,13 @@ function VVindUI:CreateWindow(opts)
 	main.ZIndex = Z.Window
 	main.Parent = root
 	Corner(main, VVindUI.Theme.CornerRadius)
-	Stroke(main, Color3.new(1, 1, 1), 1, 0.92)
+	Stroke(main, VVindUI.Theme.Border, 1, 0.92)
 	GlassLayer(main, VVindUI.Theme.CornerRadius, 0.985)
+
+	NextWindowId += 1
+	local windowId = NextWindowId
+	main:SetAttribute("VVindWindowId", windowId)
+	main:SetAttribute("VVindThemeImageColorExempt", true)
 
 	local function syncShadow()
 		shadow.AnchorPoint = main.AnchorPoint
@@ -2381,7 +2641,7 @@ function VVindUI:CreateWindow(opts)
 		btn.Name = name
 		btn.Text = ""
 		btn.AutoButtonColor = false
-		btn.BackgroundColor3 = Color3.new(1, 1, 1)
+		btn.BackgroundColor3 = VVindUI.Theme.Surface
 		btn.BackgroundTransparency = 1
 		btn.BorderSizePixel = 0
 		btn.Size = UDim2.fromOffset(26, 26)
@@ -2498,7 +2758,7 @@ function VVindUI:CreateWindow(opts)
  
 	local tabIndicator = Instance.new("Frame")
 	tabIndicator.Name = "Indicator"
-	tabIndicator.BackgroundColor3 = Color3.new(1, 1, 1)
+	tabIndicator.BackgroundColor3 = VVindUI.Theme.Surface
 	tabIndicator.BackgroundTransparency = 1
 	tabIndicator.BorderSizePixel = 0
 	tabIndicator.ZIndex = Z.Window
@@ -2509,7 +2769,7 @@ function VVindUI:CreateWindow(opts)
  
 	local divider = Instance.new("Frame")
 	divider.Name = "Divider"
-	divider.BackgroundColor3 = Color3.new(1, 1, 1)
+	divider.BackgroundColor3 = VVindUI.Theme.Surface
 	divider.BackgroundTransparency = 0.94
 	divider.BorderSizePixel = 0
 	divider.Position = UDim2.new(0, margin + 144, 0, 58)
@@ -2549,7 +2809,9 @@ function VVindUI:CreateWindow(opts)
 	Tween(main, { BackgroundTransparency = 0.15 }, 0.6, Enum.EasingStyle.Exponential)
  
 	local self = setmetatable({
+		_id             = windowId,
 		_gui            = main,
+		_backgroundImage = main,
 		_shadow         = shadow,
 		_content        = content,
 		_tabBar         = tabBar,
@@ -2565,6 +2827,9 @@ function VVindUI:CreateWindow(opts)
 		_state          = "open",
 		_busy           = false,
 		_destroyed      = false,
+		_destroyCallbacksFired = false,
+		_destroyCallbacks = {},
+		_interfaceTransparency = nil,
 		_searchIndex    = {},
 		_useBlur        = opts.UseBlur ~= false,
 		_defaultTabName = opts.DefaultTab,
@@ -2657,13 +2922,17 @@ function VVindUI:CreateWindow(opts)
 		-- Alinhado com a barra do Roblox: a ScreenGui comeca abaixo do inset, entao
 		-- subir inset.Y coloca o botao na mesma faixa das pilulas do topo.
 		local topInset  = GuiService:GetGuiInset().Y
-		local toggleSize = 45
-		local bandY = -(topInset / GetUIScale()) + ((topInset / GetUIScale()) - toggleSize) / 2
+		local configuredSize = opts.MobileToggleSize or opts.ToggleSize
+		local toggleSize = typeof(configuredSize) == "UDim2"
+			and configuredSize
+			or UDim2.fromOffset(tonumber(configuredSize) or 45, tonumber(configuredSize) or 45)
+		local toggleHeight = toggleSize.Y.Scale == 0 and toggleSize.Y.Offset or 45
+		local bandY = -(topInset / GetUIScale()) + ((topInset / GetUIScale()) - toggleHeight) / 2
  
 		mobileToggle.AnchorPoint = Vector2.new(0, 0)
-		mobileToggle.Position = opts.TogglePosition or UDim2.fromOffset(300, math.floor(bandY))
-		mobileToggle.Size = UDim2.fromOffset(toggleSize, toggleSize)
-		mobileToggle.Image = "rbxassetid://136834285051667"
+		mobileToggle.Position = opts.MobileTogglePosition or opts.TogglePosition or UDim2.fromOffset(300, math.floor(bandY))
+		mobileToggle.Size = toggleSize
+		mobileToggle.Image = opts.MobileToggleImage or opts.ToggleImage or "rbxassetid://136834285051667"
 		mobileToggle.ZIndex = Z.Toast
 		mobileToggle.Parent = root
  
@@ -2688,17 +2957,19 @@ function VVindUI:CreateWindow(opts)
 			dragged   = false
 		end))
  
-		jan:Add(UserInputService.InputChanged:Connect(function(input)
-			if input ~= dragInput or not dragStart then return end
-			local delta = input.Position - dragStart
-			if not dragged and delta.Magnitude > DRAG_SLOP then dragged = true end
-			if not dragged then return end
-			local s = GetUIScale()
-			mobileToggle.Position = UDim2.new(
-				startPos.X.Scale, startPos.X.Offset + delta.X / s,
-				startPos.Y.Scale, startPos.Y.Offset + delta.Y / s
-			)
-		end))
+		if opts.MobileToggleDraggable ~= false and opts.ToggleDraggable ~= false then
+			jan:Add(UserInputService.InputChanged:Connect(function(input)
+				if input ~= dragInput or not dragStart then return end
+				local delta = input.Position - dragStart
+				if not dragged and delta.Magnitude > DRAG_SLOP then dragged = true end
+				if not dragged then return end
+				local s = GetUIScale()
+				mobileToggle.Position = UDim2.new(
+					startPos.X.Scale, startPos.X.Offset + delta.X / s,
+					startPos.Y.Scale, startPos.Y.Offset + delta.Y / s
+				)
+			end))
+		end
  
 		jan:Add(UserInputService.InputEnded:Connect(function(input)
 			if input ~= dragInput then return end
@@ -2729,10 +3000,90 @@ end
 function Window:IsOpen()
 	return self._state == "open"
 end
+
+local function FireWindowDestroyCallbacks(window)
+	if window._destroyCallbacksFired then return end
+	window._destroyCallbacksFired = true
+	local callbacks = window._destroyCallbacks or {}
+	window._destroyCallbacks = {}
+	for _, entry in ipairs(callbacks) do
+		if entry.Connected then
+			entry.Connected = false
+			if entry.Connection then entry.Connection.Connected = false end
+			local ok, err = pcall(entry.Callback, window)
+			if not ok then warn("[VindUI] OnDestroy callback error: " .. tostring(err)) end
+		end
+	end
+end
+
+function Window:OnDestroy(callback)
+	assert(type(callback) == "function", "OnDestroy expects a callback")
+	if self._destroyed then
+		local ok, err = pcall(callback, self)
+		if not ok then warn("[VindUI] OnDestroy callback error: " .. tostring(err)) end
+		return { Connected = false, Disconnect = function() end }
+	end
+	local entry = { Callback = callback, Connected = true }
+	local callbacks = self._destroyCallbacks
+	table.insert(callbacks, entry)
+	local connection = { Connected = true }
+	entry.Connection = connection
+	function connection:Disconnect()
+		if not self.Connected then return end
+		self.Connected = false
+		entry.Connected = false
+		local index = table.find(callbacks, entry)
+		if index then table.remove(callbacks, index) end
+	end
+	return connection
+end
+
+local function IsValidImageReference(image)
+	return type(image) == "string"
+		and (image == "" or image:match("^rbxassetid://%d+$") or image:match("^rbxasset://%S+$") or image:match("^https?://%S+$"))
+end
+
+function Window:SetBackgroundImage(image)
+	if self._destroyed then return false, "window has been destroyed" end
+	if image == "" then image = nil end
+	if image ~= nil and not IsValidImageReference(image) then
+		return false, "background must be a Roblox asset id or an HTTP(S) image URL"
+	end
+	self._backgroundImage.Image = image or ""
+	return true
+end
+
+function Window:SetBackgroundImageTransparency(value)
+	if self._destroyed then return false, "window has been destroyed" end
+	if type(value) ~= "number" or value ~= value or value < 0 or value > 1 then
+		return false, "transparency must be a number between 0 and 1"
+	end
+	self._backgroundImage.ImageTransparency = value
+	return true
+end
+
+function Window:SetInterfaceTransparency(value)
+	if self._destroyed then return false, "window has been destroyed" end
+	if type(value) ~= "number" or value ~= value or value < 0 or value > 1 then
+		return false, "transparency must be a number between 0 and 1"
+	end
+	self._interfaceTransparency = value
+	self._gui.BackgroundTransparency = value
+	local root = VVindUI._Root
+	if root then
+		for _, instance in ipairs(root:GetDescendants()) do
+			if instance:GetAttribute("VVindWindowId") == self._id and instance:GetAttribute("VVindInterfacePanel") then
+				instance.BackgroundTransparency = value
+			end
+		end
+	end
+	return true
+end
  
 function Window:Destroy()
 	if self._destroyed then return end
 	self._destroyed = true
+	FireWindowDestroyCallbacks(self)
  
 	local idx = table.find(VVindUI._Windows, self)
 	if idx then table.remove(VVindUI._Windows, idx) end
@@ -2810,7 +3161,7 @@ function Window:Open()
 	local targetSize = self._sizeBeforeMinimize or self._normalSize
 	Tween(gui, {
 		Size = targetSize,
-		BackgroundTransparency = 0.15,
+		BackgroundTransparency = self._interfaceTransparency or 0.15,
 	}, 0.32, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
  
 	task.delay(0.33, function()
@@ -2856,7 +3207,7 @@ function Window:AddTabLine()
 	line.AnchorPoint = Vector2.new(0, 0.5)
 	line.Position = UDim2.new(0, 4, 0.5, 0)
 	line.Size = UDim2.new(1, -8, 0, 1)
-	line.BackgroundColor3 = Color3.new(1, 1, 1)
+	line.BackgroundColor3 = VVindUI.Theme.Surface
 	line.BackgroundTransparency = 0.92
 	line.BorderSizePixel = 0
 	line.ZIndex = Z.Content
@@ -2900,7 +3251,7 @@ function Window:AddDockButton(opts)
 	btn.Name = opts.Name or "DockButton"
 	btn.Text = ""
 	btn.AutoButtonColor = false
-	btn.BackgroundColor3 = Color3.new(1, 1, 1)
+	btn.BackgroundColor3 = VVindUI.Theme.Surface
 	btn.BackgroundTransparency = 0.95
 	btn.BorderSizePixel = 0
 	btn.Size = UDim2.fromOffset(DOCK_ICON_SIZE, DOCK_ICON_SIZE)
@@ -3173,7 +3524,7 @@ function Window:AddDefaultCreditsPanel()
 	local closeBtn = Instance.new("TextButton")
 	closeBtn.Text = ""
 	closeBtn.AutoButtonColor = false
-	closeBtn.BackgroundColor3 = Color3.new(1, 1, 1)
+	closeBtn.BackgroundColor3 = VVindUI.Theme.Surface
 	closeBtn.BackgroundTransparency = 1
 	closeBtn.BorderSizePixel = 0
 	closeBtn.AnchorPoint = Vector2.new(1, 0.5)
@@ -3197,7 +3548,7 @@ function Window:AddDefaultCreditsPanel()
 	closeBtn.MouseButton1Click:Connect(function() panel.Close() end)
  
 	local divider = Instance.new("Frame")
-	divider.BackgroundColor3 = Color3.new(1, 1, 1)
+	divider.BackgroundColor3 = VVindUI.Theme.Surface
 	divider.BackgroundTransparency = 0.94
 	divider.BorderSizePixel = 0
 	divider.Position = UDim2.fromOffset(0, HEADER_H)
@@ -3235,7 +3586,7 @@ function Window:AddDefaultCreditsPanel()
 	for i, credit in ipairs(CREDITS) do
 		local row = Instance.new("Frame")
 		row.Name = credit.Name
-		row.BackgroundColor3 = Color3.new(1, 1, 1)
+		row.BackgroundColor3 = VVindUI.Theme.Surface
 		row.BackgroundTransparency = 0.96
 		row.BorderSizePixel = 0
 		row.LayoutOrder = i
@@ -3248,7 +3599,7 @@ function Window:AddDefaultCreditsPanel()
 		rowCorner.Parent = row
  
 		local rowStroke = Instance.new("UIStroke")
-		rowStroke.Color = Color3.new(1, 1, 1)
+		rowStroke.Color = VVindUI.Theme.Border
 		rowStroke.Transparency = 0.94
 		rowStroke.Thickness = 1
 		rowStroke.Parent = row
@@ -3423,7 +3774,7 @@ function Window:AddSpotifyPanel(opts)
 	jan:Add(closeBtn.MouseButton1Click:Connect(function() panel.Close() end))
  
 	local divider = Instance.new("Frame")
-	divider.BackgroundColor3 = Color3.new(1, 1, 1)
+	divider.BackgroundColor3 = VVindUI.Theme.Surface
 	divider.BackgroundTransparency = 0.94
 	divider.BorderSizePixel = 0
 	divider.Position = UDim2.fromOffset(0, HEADER_H)
@@ -3470,7 +3821,7 @@ function Window:AddSpotifyPanel(opts)
  
 	local function makeCard(height, order, parent)
 		local card = Instance.new("Frame")
-		card.BackgroundColor3 = Color3.new(1, 1, 1)
+		card.BackgroundColor3 = VVindUI.Theme.Surface
 		card.BackgroundTransparency = 0.96
 		card.BorderSizePixel = 0
 		card.Size = UDim2.new(1, 0, 0, height)
@@ -3478,7 +3829,7 @@ function Window:AddSpotifyPanel(opts)
 		card.ZIndex = Z.Content + 2
 		card.Parent = parent or scroll
 		Corner(card, 10)
-		Stroke(card, Color3.new(1, 1, 1), 1, 0.94)
+		Stroke(card, VVindUI.Theme.Border, 1, 0.94)
 		return card
 	end
  
@@ -3491,7 +3842,7 @@ function Window:AddSpotifyPanel(opts)
  
 	local statusCard = makeCard(30, 6)
 	local statusDot = Instance.new("Frame")
-	statusDot.BackgroundColor3 = Color3.fromRGB(125, 130, 128)
+	statusDot.BackgroundColor3 = VVindUI.Theme.TextDim
 	statusDot.BorderSizePixel = 0
 	statusDot.AnchorPoint = Vector2.new(0, 0.5)
 	statusDot.Position = UDim2.new(0, 11, 0.5, 0)
@@ -3519,7 +3870,7 @@ function Window:AddSpotifyPanel(opts)
 	art.BackgroundTransparency = 0.84
 	art.BorderSizePixel = 0
 	art.Image = ""
-	art.ImageColor3 = Color3.new(1, 1, 1)
+	art.ImageColor3 = VVindUI.Theme.Text
 	art.ScaleType = Enum.ScaleType.Crop
 	art.AnchorPoint = Vector2.new(0, 0)
 	art.Position = UDim2.fromOffset(0, 12)
@@ -3527,7 +3878,7 @@ function Window:AddSpotifyPanel(opts)
 	art.ZIndex = Z.Content + 3
 	art.Parent = nowCard
 	Corner(art, 12)
-	Stroke(art, Color3.new(1, 1, 1), 1, 0.9)
+	Stroke(art, VVindUI.Theme.Border, 1, 0.9)
  
 	local artIcon = Instance.new("ImageLabel")
 	artIcon.BackgroundTransparency = 1
@@ -3618,7 +3969,7 @@ function Window:AddSpotifyPanel(opts)
 	artistLabel.Parent = nowCard
  
 	local progressTrack = Instance.new("Frame")
-	progressTrack.BackgroundColor3 = Color3.fromRGB(95, 100, 98)
+	progressTrack.BackgroundColor3 = VVindUI.Theme.SurfaceHover
 	progressTrack.BackgroundTransparency = 0.45
 	progressTrack.BorderSizePixel = 0
 	progressTrack.Position = UDim2.fromOffset(100, 76)
@@ -3636,7 +3987,7 @@ function Window:AddSpotifyPanel(opts)
 	Corner(progressFill, 2)
  
 	local progressKnob = Instance.new("Frame")
-	progressKnob.BackgroundColor3 = Color3.fromRGB(235, 239, 237)
+	progressKnob.BackgroundColor3 = VVindUI.Theme.Text
 	progressKnob.BorderSizePixel = 0
 	progressKnob.AnchorPoint = Vector2.new(0.5, 0.5)
 	progressKnob.Position = UDim2.new(0, 0, 0.5, 0)
@@ -3646,7 +3997,7 @@ function Window:AddSpotifyPanel(opts)
 	Corner(progressKnob, 5)
  
 	local seekBubble = Instance.new("Frame")
-	seekBubble.BackgroundColor3 = Color3.fromRGB(21, 26, 24)
+	seekBubble.BackgroundColor3 = VVindUI.Theme.Background
 	seekBubble.BackgroundTransparency = 0.04
 	seekBubble.BorderSizePixel = 0
 	seekBubble.AnchorPoint = Vector2.new(0.5, 1)
@@ -3656,7 +4007,7 @@ function Window:AddSpotifyPanel(opts)
 	seekBubble.ZIndex = Z.Content + 8
 	seekBubble.Parent = progressTrack
 	Corner(seekBubble, 7)
-	Stroke(seekBubble, Color3.new(1, 1, 1), 1, 0.9)
+	Stroke(seekBubble, VVindUI.Theme.Border, 1, 0.9)
 	local seekBubbleLabel = Instance.new("TextLabel")
 	seekBubbleLabel.BackgroundTransparency = 1
 	seekBubbleLabel.FontFace = VVindUI.Theme.Font
@@ -3702,7 +4053,7 @@ function Window:AddSpotifyPanel(opts)
 	durationLabel.Parent = nowCard
  
 	local controlsDivider = Instance.new("Frame")
-	controlsDivider.BackgroundColor3 = Color3.new(1, 1, 1)
+	controlsDivider.BackgroundColor3 = VVindUI.Theme.Surface
 	controlsDivider.BackgroundTransparency = 0.93
 	controlsDivider.BorderSizePixel = 0
 	controlsDivider.Position = UDim2.fromOffset(0, 111)
@@ -3731,7 +4082,7 @@ function Window:AddSpotifyPanel(opts)
 		button.Name = name
 		button.Text = ""
 		button.AutoButtonColor = false
-		button.BackgroundColor3 = primary and Color3.fromRGB(30, 215, 96) or Color3.new(1, 1, 1)
+		button.BackgroundColor3 = primary and Color3.fromRGB(30, 215, 96) or VVindUI.Theme.Surface
 		button.BackgroundTransparency = primary and 0.05 or 0.94
 		button.BorderSizePixel = 0
 		button.Size = UDim2.fromOffset(primary and 36 or 32, primary and 36 or 32)
@@ -3774,7 +4125,7 @@ function Window:AddSpotifyPanel(opts)
 		label.Parent = card
  
 		local pill = Instance.new("Frame")
-		pill.BackgroundColor3 = Color3.new(1, 1, 1)
+		pill.BackgroundColor3 = VVindUI.Theme.Surface
 		pill.BackgroundTransparency = 0.94
 		pill.BorderSizePixel = 0
 		pill.Position = UDim2.fromOffset(10, 27)
@@ -3786,7 +4137,7 @@ function Window:AddSpotifyPanel(opts)
 		local button = Instance.new("TextButton")
 		button.Text = ""
 		button.AutoButtonColor = false
-		button.BackgroundColor3 = Color3.new(1, 1, 1)
+		button.BackgroundColor3 = VVindUI.Theme.Surface
 		button.BackgroundTransparency = 0.91
 		button.BorderSizePixel = 0
 		button.AnchorPoint = Vector2.new(1, 0)
@@ -3795,7 +4146,7 @@ function Window:AddSpotifyPanel(opts)
 		button.ZIndex = Z.Content + 5
 		button.Parent = pill
 		Corner(button, 7)
-		Stroke(button, Color3.new(1, 1, 1), 1, 0.94)
+		Stroke(button, VVindUI.Theme.Border, 1, 0.94)
 		local buttonImage = Instance.new("ImageLabel")
 		buttonImage.BackgroundTransparency = 1
 		buttonImage.Image = ResolveIcon(buttonIcon)
@@ -3810,7 +4161,7 @@ function Window:AddSpotifyPanel(opts)
 		box.ClearTextOnFocus = false
 		box.FontFace = VVindUI.Theme.FontRegular
 		box.PlaceholderText = placeholder
-		box.PlaceholderColor3 = Color3.fromRGB(115, 120, 118)
+		box.PlaceholderColor3 = VVindUI.Theme.TextDim
 		box.Text = ""
 		box.TextColor3 = VVindUI.Theme.Text
 		box.TextSize = 11
@@ -3910,7 +4261,7 @@ function Window:AddSpotifyPanel(opts)
 	favoritesHint.Parent = favoritesHeader
 	favoritesHint.Visible = false
 	local favoritesSearchPill = Instance.new("Frame")
-	favoritesSearchPill.BackgroundColor3 = Color3.new(1, 1, 1)
+	favoritesSearchPill.BackgroundColor3 = VVindUI.Theme.Surface
 	favoritesSearchPill.BackgroundTransparency = 0.94
 	favoritesSearchPill.BorderSizePixel = 0
 	favoritesSearchPill.Position = UDim2.fromOffset(8, 7)
@@ -3932,7 +4283,7 @@ function Window:AddSpotifyPanel(opts)
 	favoritesSearchBox.ClearTextOnFocus = false
 	favoritesSearchBox.FontFace = VVindUI.Theme.FontRegular
 	favoritesSearchBox.PlaceholderText = "Search favorite playlists..."
-	favoritesSearchBox.PlaceholderColor3 = Color3.fromRGB(115, 120, 118)
+	favoritesSearchBox.PlaceholderColor3 = VVindUI.Theme.TextDim
 	favoritesSearchBox.Text = ""
 	favoritesSearchBox.TextColor3 = VVindUI.Theme.Text
 	favoritesSearchBox.TextSize = 11
@@ -3944,7 +4295,7 @@ function Window:AddSpotifyPanel(opts)
 	local addFavoriteBtn = Instance.new("TextButton")
 	addFavoriteBtn.Text = ""
 	addFavoriteBtn.AutoButtonColor = false
-	addFavoriteBtn.BackgroundColor3 = Color3.new(1, 1, 1)
+	addFavoriteBtn.BackgroundColor3 = VVindUI.Theme.Surface
 	addFavoriteBtn.BackgroundTransparency = 0.96
 	addFavoriteBtn.BorderSizePixel = 0
 	addFavoriteBtn.Position = UDim2.fromOffset(8, 113)
@@ -3952,7 +4303,7 @@ function Window:AddSpotifyPanel(opts)
 	addFavoriteBtn.ZIndex = Z.Content + 4
 	addFavoriteBtn.Parent = favoritesHeader
 	Corner(addFavoriteBtn, 10)
-	Stroke(addFavoriteBtn, Color3.new(1, 1, 1), 1, 0.94)
+	Stroke(addFavoriteBtn, VVindUI.Theme.Border, 1, 0.94)
 	local addFavoriteIcon = Instance.new("ImageLabel")
 	addFavoriteIcon.BackgroundTransparency = 1
 	addFavoriteIcon.Image = ResolveIcon("heart-plus")
@@ -3994,7 +4345,7 @@ function Window:AddSpotifyPanel(opts)
 	saveFavoriteChevron.ZIndex = Z.Content + 5
 	saveFavoriteChevron.Parent = addFavoriteBtn
 	local saveFavoriteDivider = Instance.new("Frame")
-	saveFavoriteDivider.BackgroundColor3 = Color3.new(1, 1, 1)
+	saveFavoriteDivider.BackgroundColor3 = VVindUI.Theme.Surface
 	saveFavoriteDivider.BackgroundTransparency = 0.92
 	saveFavoriteDivider.BorderSizePixel = 0
 	saveFavoriteDivider.Position = UDim2.fromOffset(8, 103)
@@ -4042,7 +4393,7 @@ function Window:AddSpotifyPanel(opts)
  
 	local function setStatus(text, color)
 		statusLabel.Text = tostring(text or "")
-		statusDot.BackgroundColor3 = color or Color3.fromRGB(125, 130, 128)
+	statusDot.BackgroundColor3 = color or VVindUI.Theme.TextDim
 	end
  
 	local notifyTimes = {}
@@ -4137,7 +4488,7 @@ function Window:AddSpotifyPanel(opts)
 			local favorite = entry.Favorite
 			local originalIndex = entry.Index
 			local row = Instance.new("Frame")
-			row.BackgroundColor3 = Color3.new(1, 1, 1)
+			row.BackgroundColor3 = VVindUI.Theme.Surface
 			row.BackgroundTransparency = 0.96
 			row.BorderSizePixel = 0
 			row.Position = UDim2.fromOffset(0, (visibleIndex - 1) * 64)
@@ -4145,9 +4496,9 @@ function Window:AddSpotifyPanel(opts)
 			row.ZIndex = Z.Content + 3
 			row.Parent = favoritesList
 			Corner(row, 10)
-			Stroke(row, Color3.new(1, 1, 1), 1, 0.94)
+			Stroke(row, VVindUI.Theme.Border, 1, 0.94)
 			local playlistIconBox = Instance.new("Frame")
-			playlistIconBox.BackgroundColor3 = Color3.new(1, 1, 1)
+			playlistIconBox.BackgroundColor3 = VVindUI.Theme.Surface
 			playlistIconBox.BackgroundTransparency = 0.91
 			playlistIconBox.BorderSizePixel = 0
 			playlistIconBox.Position = UDim2.fromOffset(10, 9)
@@ -4190,7 +4541,7 @@ function Window:AddSpotifyPanel(opts)
 			local loadFavorite = Instance.new("TextButton")
 			loadFavorite.Text = ""
 			loadFavorite.AutoButtonColor = false
-			loadFavorite.BackgroundColor3 = Color3.new(1, 1, 1)
+			loadFavorite.BackgroundColor3 = VVindUI.Theme.Surface
 			loadFavorite.BackgroundTransparency = 0.91
 			loadFavorite.BorderSizePixel = 0
 			loadFavorite.Position = UDim2.new(1, -76, 0, 13)
@@ -4209,7 +4560,7 @@ function Window:AddSpotifyPanel(opts)
 			loadFavoriteIcon.Parent = loadFavorite
 			local removeFavorite = Instance.new("TextButton")
 			removeFavorite.Text = ""
-			removeFavorite.BackgroundColor3 = Color3.new(1, 1, 1)
+			removeFavorite.BackgroundColor3 = VVindUI.Theme.Surface
 			removeFavorite.BackgroundTransparency = 0.94
 			removeFavorite.Position = UDim2.new(1, -38, 0, 13)
 			removeFavorite.Size = UDim2.fromOffset(30, 32)
@@ -4311,7 +4662,7 @@ function Window:AddSpotifyPanel(opts)
 		isConnected = false
 		if connectBtnIcon then connectBtnIcon.Image = ResolveIcon("link-2") end
 		if oldSocket then pcall(function() oldSocket:Close() end) end
-		if not silent then setStatus("Bridge disconnected", Color3.fromRGB(125, 130, 128)) end
+		if not silent then setStatus("Bridge disconnected", VVindUI.Theme.TextDim) end
 	end
  
 	local function bindSocketEvent(event, callback)
@@ -4489,7 +4840,7 @@ function Window:AddSpotifyPanel(opts)
 	if opts.BridgeUrl == nil or opts.BridgeUrl == "" then
 		setStatus("Spotify bridge is not configured by the script owner", Color3.fromRGB(255, 190, 90))
 	else
-		setStatus("Tap Connect, then open the copied browser link", Color3.fromRGB(125, 130, 128))
+		setStatus("Tap Connect, then open the copied browser link", VVindUI.Theme.TextDim)
 	end
 	return panel
 end
@@ -4710,7 +5061,7 @@ function Window:AddChatPanel(opts)
 		local btn = Instance.new("TextButton")
 		btn.Text = ""
 		btn.AutoButtonColor = false
-		btn.BackgroundColor3 = Color3.new(1, 1, 1)
+		btn.BackgroundColor3 = VVindUI.Theme.Surface
 		btn.BackgroundTransparency = 1
 		btn.BorderSizePixel = 0
 		btn.Size = UDim2.fromOffset(22, 22)
@@ -4747,7 +5098,7 @@ function Window:AddChatPanel(opts)
 	local closeBtn = headerIconButton("x", 4)
  
 	local headerDivider = Instance.new("Frame")
-	headerDivider.BackgroundColor3 = Color3.new(1, 1, 1)
+	headerDivider.BackgroundColor3 = VVindUI.Theme.Surface
 	headerDivider.BackgroundTransparency = 0.94
 	headerDivider.BorderSizePixel = 0
 	headerDivider.Position = UDim2.fromOffset(0, HEADER_H)
@@ -4771,14 +5122,14 @@ function Window:AddChatPanel(opts)
 	inputRow.Parent = content
  
 	local pill = Instance.new("Frame")
-	pill.BackgroundColor3 = Color3.new(1, 1, 1)
+	pill.BackgroundColor3 = VVindUI.Theme.Surface
 	pill.BackgroundTransparency = 0.95
 	pill.BorderSizePixel = 0
 	pill.Size = UDim2.new(1, -(INPUT_H + 6), 1, 0)
 	pill.ZIndex = BASE_Z + 1
 	pill.Parent = inputRow
 	Corner(pill, 9)
-	local pillStroke = Stroke(pill, Color3.new(1, 1, 1), 1, 0.9)
+	local pillStroke = Stroke(pill, VVindUI.Theme.Border, 1, 0.9)
  
 	local pillPad = Instance.new("UIPadding")
 	pillPad.PaddingLeft = UDim.new(0, 10)
@@ -4790,7 +5141,7 @@ function Window:AddChatPanel(opts)
 	inputBox.ClearTextOnFocus = false
 	inputBox.FontFace = VVindUI.Theme.FontRegular
 	inputBox.PlaceholderText = opts.Placeholder or "Ask me anything..."
-	inputBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 122)
+	inputBox.PlaceholderColor3 = VVindUI.Theme.TextDim
 	inputBox.Text = ""
 	inputBox.TextColor3 = VVindUI.Theme.Text
 	inputBox.TextSize = 13
@@ -4805,14 +5156,14 @@ function Window:AddChatPanel(opts)
 		Tween(pillStroke, { Color = VVindUI.Theme.Accent, Transparency = 0.3 }, 0.15)
 	end))
 	jan:Add(inputBox.FocusLost:Connect(function()
-		Tween(pillStroke, { Color = Color3.new(1, 1, 1), Transparency = 0.9 }, 0.15)
+		Tween(pillStroke, { Color = VVindUI.Theme.Border, Transparency = 0.9 }, 0.15)
 	end))
  
 	local sendBtn = Instance.new("TextButton")
 	sendBtn.Name = "Send"
 	sendBtn.Text = ""
 	sendBtn.AutoButtonColor = false
-	sendBtn.BackgroundColor3 = Color3.new(1, 1, 1)
+	sendBtn.BackgroundColor3 = VVindUI.Theme.Surface
 	sendBtn.BackgroundTransparency = 0.9
 	sendBtn.BorderSizePixel = 0
 	sendBtn.AnchorPoint = Vector2.new(1, 0)
@@ -4914,7 +5265,7 @@ function Window:AddChatPanel(opts)
 		local avatarFinalTransparency = isUser and 0.85 or 0.82
 		local avatar = Instance.new("Frame")
 		avatar.Name = "Avatar"
-		avatar.BackgroundColor3 = isUser and Color3.new(1, 1, 1) or VVindUI.Theme.Accent
+		avatar.BackgroundColor3 = VVindUI.Theme.Accent
 		avatar.BackgroundTransparency = 1
 		avatar.BorderSizePixel = 0
 		avatar.Size = UDim2.fromOffset(AVATAR, AVATAR)
@@ -4982,7 +5333,7 @@ function Window:AddChatPanel(opts)
 		local bubbleFinalTransparency = isUser and 0.72 or 0.9
 		local bubble = Instance.new("Frame")
 		bubble.Name = "Bubble"
-		bubble.BackgroundColor3 = isUser and VVindUI.Theme.Accent or Color3.new(1, 1, 1)
+		bubble.BackgroundColor3 = isUser and VVindUI.Theme.Accent or VVindUI.Theme.Surface
 		bubble.BackgroundTransparency = 1
 		bubble.BorderSizePixel = 0
 		bubble.AutomaticSize = Enum.AutomaticSize.Y
@@ -4992,7 +5343,7 @@ function Window:AddChatPanel(opts)
 		bubble.Parent = row
 		Corner(bubble, 12)
 		local strokeFinalTransparency = isUser and 0.8 or 0.9
-		local bubbleStroke = Stroke(bubble, Color3.new(1, 1, 1), 1, 1)
+		local bubbleStroke = Stroke(bubble, VVindUI.Theme.Border, 1, 1)
  
 		local bubblePad = Instance.new("UIPadding")
 		bubblePad.PaddingTop = UDim.new(0, V_PAD)
@@ -5030,7 +5381,7 @@ function Window:AddChatPanel(opts)
 				card.ZIndex = BASE_Z + 3
 				card.Parent = bubble
 				Corner(card, 8)
-				Stroke(card, Color3.new(1, 1, 1), 1, 0.92)
+				Stroke(card, VVindUI.Theme.Border, 1, 0.92)
  
 				local cardLayout = Instance.new("UIListLayout")
 				cardLayout.FillDirection = Enum.FillDirection.Vertical
@@ -5060,7 +5411,7 @@ function Window:AddChatPanel(opts)
 					local btn = Instance.new("TextButton")
 					btn.Text = ""
 					btn.AutoButtonColor = false
-					btn.BackgroundColor3 = Color3.new(1, 1, 1)
+					btn.BackgroundColor3 = VVindUI.Theme.Surface
 					btn.BackgroundTransparency = 1
 					btn.BorderSizePixel = 0
 					btn.AnchorPoint = Vector2.new(1, 0.5)
@@ -5130,7 +5481,7 @@ function Window:AddChatPanel(opts)
 				end
  
 				local headerDivider = Instance.new("Frame")
-				headerDivider.BackgroundColor3 = Color3.new(1, 1, 1)
+				headerDivider.BackgroundColor3 = VVindUI.Theme.Surface
 				headerDivider.BackgroundTransparency = 0.92
 				headerDivider.BorderSizePixel = 0
 				headerDivider.Size = UDim2.new(1, 0, 0, 1)
@@ -5308,7 +5659,7 @@ function Window:AddChatPanel(opts)
 		botIcon.Parent = avatar
  
 		local bubble = Instance.new("Frame")
-		bubble.BackgroundColor3 = Color3.new(1, 1, 1)
+		bubble.BackgroundColor3 = VVindUI.Theme.Surface
 		bubble.BackgroundTransparency = 1
 		bubble.BorderSizePixel = 0
 		bubble.Size = UDim2.fromOffset(38, AVATAR)
@@ -5316,7 +5667,7 @@ function Window:AddChatPanel(opts)
 		bubble.ZIndex = BASE_Z + 2
 		bubble.Parent = row
 		Corner(bubble, 12)
-		local bubbleStroke = Stroke(bubble, Color3.new(1, 1, 1), 1, 1)
+		local bubbleStroke = Stroke(bubble, VVindUI.Theme.Border, 1, 1)
  
 		local tweens = {}
 		for i = 1, 3 do
@@ -6107,7 +6458,7 @@ function Window:AddGlobalChatPanel(opts)
 		local btn = Instance.new("TextButton")
 		btn.Text = ""
 		btn.AutoButtonColor = false
-		btn.BackgroundColor3 = Color3.new(1, 1, 1)
+		btn.BackgroundColor3 = VVindUI.Theme.Surface
 		btn.BackgroundTransparency = 1
 		btn.BorderSizePixel = 0
 		btn.Size = UDim2.fromOffset(22, 22)
@@ -6150,7 +6501,7 @@ function Window:AddGlobalChatPanel(opts)
 	local closeBtn, closeIcon = headerIconButton("x", 5)
  
 	local headerDivider = Instance.new("Frame")
-	headerDivider.BackgroundColor3 = Color3.new(1, 1, 1)
+	headerDivider.BackgroundColor3 = VVindUI.Theme.Surface
 	headerDivider.BackgroundTransparency = 0.94
 	headerDivider.BorderSizePixel = 0
 	headerDivider.Position = UDim2.fromOffset(0, HEADER_H)
@@ -6174,14 +6525,14 @@ function Window:AddGlobalChatPanel(opts)
 	inputRow.Parent = content
  
 	local pill = Instance.new("Frame")
-	pill.BackgroundColor3 = Color3.new(1, 1, 1)
+	pill.BackgroundColor3 = VVindUI.Theme.Surface
 	pill.BackgroundTransparency = 0.95
 	pill.BorderSizePixel = 0
 	pill.Size = UDim2.new(1, -(INPUT_H + 6), 1, 0)
 	pill.ZIndex = BASE_Z + 1
 	pill.Parent = inputRow
 	Corner(pill, 9)
-	local pillStroke = Stroke(pill, Color3.new(1, 1, 1), 1, 0.9)
+	local pillStroke = Stroke(pill, VVindUI.Theme.Border, 1, 0.9)
  
 	local pillPad = Instance.new("UIPadding")
 	pillPad.PaddingLeft = UDim.new(0, 10)
@@ -6193,7 +6544,7 @@ function Window:AddGlobalChatPanel(opts)
 	inputBox.ClearTextOnFocus = false
 	inputBox.FontFace = VVindUI.Theme.FontRegular
 	inputBox.PlaceholderText = opts.Placeholder or "Message everyone using this script..."
-	inputBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 122)
+	inputBox.PlaceholderColor3 = VVindUI.Theme.TextDim
 	inputBox.Text = ""
 	inputBox.TextColor3 = VVindUI.Theme.Text
 	inputBox.TextSize = 13
@@ -6208,13 +6559,13 @@ function Window:AddGlobalChatPanel(opts)
 		Tween(pillStroke, { Color = VVindUI.Theme.Accent, Transparency = 0.3 }, 0.15)
 	end))
 	jan:Add(inputBox.FocusLost:Connect(function()
-		Tween(pillStroke, { Color = Color3.new(1, 1, 1), Transparency = 0.9 }, 0.15)
+		Tween(pillStroke, { Color = VVindUI.Theme.Border, Transparency = 0.9 }, 0.15)
 	end))
  
 	local sendBtn = Instance.new("TextButton")
 	sendBtn.Text = ""
 	sendBtn.AutoButtonColor = false
-	sendBtn.BackgroundColor3 = Color3.new(1, 1, 1)
+	sendBtn.BackgroundColor3 = VVindUI.Theme.Surface
 	sendBtn.BackgroundTransparency = 0.9
 	sendBtn.BorderSizePixel = 0
 	sendBtn.AnchorPoint = Vector2.new(1, 0)
@@ -6375,7 +6726,7 @@ function Window:AddGlobalChatPanel(opts)
  
 		local bubble = Instance.new("Frame")
 		bubble.Name = "Bubble"
-		bubble.BackgroundColor3 = isOwn and VVindUI.Theme.Accent or Color3.new(1, 1, 1)
+		bubble.BackgroundColor3 = isOwn and VVindUI.Theme.Accent or VVindUI.Theme.Surface
 		bubble.BackgroundTransparency = 1
 		bubble.BorderSizePixel = 0
 		bubble.ClipsDescendants = true
@@ -6385,7 +6736,7 @@ function Window:AddGlobalChatPanel(opts)
 		bubble.ZIndex = BASE_Z + 2
 		bubble.Parent = row
 		Corner(bubble, 12)
-		local bubbleStroke = Stroke(bubble, Color3.new(1, 1, 1), 1, 1)
+		local bubbleStroke = Stroke(bubble, VVindUI.Theme.Border, 1, 1)
  
 		local bubblePad = Instance.new("UIPadding")
 		bubblePad.PaddingTop = UDim.new(0, V_PAD)
@@ -6420,7 +6771,7 @@ function Window:AddGlobalChatPanel(opts)
 			timeLbl.BackgroundTransparency = 1
 			timeLbl.FontFace = VVindUI.Theme.FontRegular
 			timeLbl.Text = os.date("%H:%M", math.floor(msg.CreatedAt / 1000))
-			timeLbl.TextColor3 = isOwn and Color3.new(1, 1, 1) or VVindUI.Theme.TextDim
+			timeLbl.TextColor3 = isOwn and VVindUI.Theme.Text or VVindUI.Theme.TextDim
 			timeLbl.TextTransparency = isOwn and 0.5 or 0.4
 			timeLbl.TextSize = 10
 			timeLbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -6438,7 +6789,7 @@ function Window:AddGlobalChatPanel(opts)
 			local reportBtn = Instance.new("TextButton")
 			reportBtn.Text = ""
 			reportBtn.AutoButtonColor = false
-			reportBtn.BackgroundColor3 = Color3.new(1, 1, 1)
+			reportBtn.BackgroundColor3 = VVindUI.Theme.Surface
 			reportBtn.BackgroundTransparency = 1
 			reportBtn.BorderSizePixel = 0
 			reportBtn.Size = UDim2.fromOffset(20, 20)
@@ -6583,7 +6934,7 @@ function Window:AddGlobalChatPanel(opts)
 		local popup = Instance.new("Frame")
 		popup.Name = "ChatSettingsPopup"
 		popup.BackgroundColor3 = VVindUI.Theme.Surface
-		popup.BackgroundTransparency = 0.05
+		popup.BackgroundTransparency = self._interfaceTransparency or 0.05
 		popup.BorderSizePixel = 0
 		popup.AnchorPoint = Vector2.new(1, 0)
 		popup.Position = UDim2.new(1, 0, 0, HEADER_H + 4)
@@ -6592,8 +6943,10 @@ function Window:AddGlobalChatPanel(opts)
 		popup.ClipsDescendants = true
 		popup.ZIndex = BASE_Z + 10
 		popup.Parent = panel
+		popup:SetAttribute("VVindInterfacePanel", true)
+		popup:SetAttribute("VVindWindowId", self._id)
 		Corner(popup, 10)
-		local popupStroke = Stroke(popup, Color3.new(1, 1, 1), 1, 0.88)
+		local popupStroke = Stroke(popup, VVindUI.Theme.Border, 1, 0.88)
  
 		local popupPad = Instance.new("UIPadding")
 		popupPad.PaddingTop = UDim.new(0, 10)
@@ -6629,7 +6982,7 @@ function Window:AddGlobalChatPanel(opts)
 			local check = Instance.new("TextButton")
 			check.Text = ""
 			check.AutoButtonColor = false
-			check.BackgroundColor3 = Color3.new(1, 1, 1)
+			check.BackgroundColor3 = VVindUI.Theme.Surface
 			check.BackgroundTransparency = getValue() and 0.7 or 0.92
 			check.BorderSizePixel = 0
 			check.AnchorPoint = Vector2.new(1, 0.5)
@@ -6768,7 +7121,7 @@ function Window:AddTab(nameOrOpts)
 	tabButton.Name = name
 	tabButton.Text = ""
 	tabButton.AutoButtonColor = false
-	tabButton.BackgroundColor3 = Color3.new(1, 1, 1)
+	tabButton.BackgroundColor3 = VVindUI.Theme.Surface
 	tabButton.BackgroundTransparency = 1
 	tabButton.BorderSizePixel = 0
 	tabButton.Size = UDim2.new(1, 0, 0, 34)
@@ -7099,8 +7452,10 @@ function Window:_PromptTabPassword(tabObj, callback)
 	dialog.Size = UDim2.new(0, 300, 0, 0)
 	dialog.ZIndex = Z.ModalTop
 	dialog.Parent = backdrop
+	dialog:SetAttribute("VVindInterfacePanel", true)
+	dialog:SetAttribute("VVindWindowId", self._id)
 	Corner(dialog, 14)
-	local dialogStroke = Stroke(dialog, Color3.new(1, 1, 1), 1, 0.9)
+	local dialogStroke = Stroke(dialog, VVindUI.Theme.Border, 1, 0.9)
  
 	local scale = Instance.new("UIScale")
 	scale.Scale = 0.94
@@ -7162,7 +7517,7 @@ function Window:_PromptTabPassword(tabObj, callback)
 	subtitle.Parent = dialog
  
 	local fieldHolder = Instance.new("Frame")
-	fieldHolder.BackgroundColor3 = Color3.new(1, 1, 1)
+	fieldHolder.BackgroundColor3 = VVindUI.Theme.Surface
 	fieldHolder.BackgroundTransparency = 0.94
 	fieldHolder.BorderSizePixel = 0
 	fieldHolder.ClipsDescendants = true
@@ -7171,7 +7526,7 @@ function Window:_PromptTabPassword(tabObj, callback)
 	fieldHolder.ZIndex = Z.ModalTop + 1
 	fieldHolder.Parent = dialog
 	Corner(fieldHolder, 8)
-	local fieldStroke = Stroke(fieldHolder, Color3.new(1, 1, 1), 1, 0.88)
+	local fieldStroke = Stroke(fieldHolder, VVindUI.Theme.Border, 1, 0.88)
  
 	local box = Instance.new("TextBox")
 	box.BackgroundTransparency = 1
@@ -7230,7 +7585,7 @@ function Window:_PromptTabPassword(tabObj, callback)
 	rememberSwitch.AnchorPoint = Vector2.new(0, 0.5)
 	rememberSwitch.Position = UDim2.new(0, 0, 0.5, 0)
 	rememberSwitch.Size = UDim2.fromOffset(32, 18)
-	rememberSwitch.BackgroundColor3 = remember and Color3.new(1, 1, 1) or Color3.fromRGB(60, 60, 60)
+	rememberSwitch.BackgroundColor3 = remember and VVindUI.Theme.Accent or VVindUI.Theme.Surface
 	rememberSwitch.BorderSizePixel = 0
 	rememberSwitch.ZIndex = Z.ModalTop + 2
 	rememberSwitch.Parent = rememberRow
@@ -7253,7 +7608,7 @@ function Window:_PromptTabPassword(tabObj, callback)
 	rememberKnob.Size = UDim2.fromOffset(14, 14)
 	rememberKnob.AnchorPoint = Vector2.new(0, 0.5)
 	rememberKnob.Position = remember and UDim2.new(1, -16, 0.5, 0) or UDim2.new(0, 2, 0.5, 0)
-	rememberKnob.BackgroundColor3 = remember and Color3.fromRGB(18, 18, 18) or Color3.new(1, 1, 1)
+	rememberKnob.BackgroundColor3 = remember and VVindUI.Theme.Background or VVindUI.Theme.Text
 	rememberKnob.BorderSizePixel = 0
 	rememberKnob.ZIndex = Z.ModalTop + 3
 	rememberKnob.Parent = rememberSwitch
@@ -7270,10 +7625,10 @@ function Window:_PromptTabPassword(tabObj, callback)
 	jan:Add(rememberClick.MouseButton1Click:Connect(function()
 		remember = not remember
 		Tween(rememberSwitch, {
-			BackgroundColor3 = remember and Color3.new(1, 1, 1) or Color3.fromRGB(60, 60, 60),
+			BackgroundColor3 = remember and VVindUI.Theme.Accent or VVindUI.Theme.Surface,
 		}, 0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut)
 		Tween(rememberKnob, {
-			BackgroundColor3 = remember and Color3.fromRGB(18, 18, 18) or Color3.new(1, 1, 1),
+			BackgroundColor3 = remember and VVindUI.Theme.Background or VVindUI.Theme.Text,
 			Position = remember and UDim2.new(1, -16, 0.5, 0) or UDim2.new(0, 2, 0.5, 0),
 		}, 0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.InOut)
 	end))
@@ -7295,7 +7650,7 @@ function Window:_PromptTabPassword(tabObj, callback)
 		local btn = Instance.new("TextButton")
 		btn.Text = ""
 		btn.AutoButtonColor = false
-		btn.BackgroundColor3 = Color3.new(1, 1, 1)
+		btn.BackgroundColor3 = VVindUI.Theme.Surface
 		btn.BackgroundTransparency = filled and 0.82 or 1
 		btn.BorderSizePixel = 0
 		btn.Size = UDim2.new(0.5, -4, 1, 0)
@@ -7303,7 +7658,7 @@ function Window:_PromptTabPassword(tabObj, callback)
 		btn.ZIndex = Z.ModalTop + 1
 		btn.Parent = buttonsRow
 		Corner(btn, 10)
-		local btnStroke = Stroke(btn, Color3.new(1, 1, 1), 1, filled and 0.7 or 0.85)
+		local btnStroke = Stroke(btn, VVindUI.Theme.Border, 1, filled and 0.7 or 0.85)
  
 		local lbl = Instance.new("TextLabel")
 		lbl.BackgroundTransparency = 1
@@ -7364,7 +7719,7 @@ function Window:_PromptTabPassword(tabObj, callback)
  
 		task.delay(1.4, function()
 			if closed then return end
-			Tween(fieldStroke, { Color = Color3.new(1, 1, 1), Transparency = 0.88 }, 0.3)
+			Tween(fieldStroke, { Color = VVindUI.Theme.Border, Transparency = 0.88 }, 0.3)
 			Tween(placeholderLabel, { TextColor3 = VVindUI.Theme.TextDim }, 0.3)
 			task.delay(0.3, function()
 				if not closed then placeholderLabel.Text = "Password" end
@@ -7397,7 +7752,7 @@ function Window:_PromptTabPassword(tabObj, callback)
 	end))
  
 	Tween(backdrop, { BackgroundTransparency = 0.5 }, 0.18)
-	Tween(dialog, { BackgroundTransparency = 0 }, 0.18)
+	Tween(dialog, { BackgroundTransparency = self._interfaceTransparency or 0 }, 0.18)
 	Tween(dialogStroke, { Transparency = 0.8 }, 0.18)
 	Tween(scale, { Scale = 1 }, 0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
  
@@ -7551,14 +7906,16 @@ function Window:_OpenSearch()
 	end
 	panel.Size = UDim2.new(0, panelW, 0, HEADER_H)
 	panel.BackgroundColor3 = VVindUI.Theme.Background
-	panel.BackgroundTransparency = 0.05
+	panel.BackgroundTransparency = self_._interfaceTransparency or 0.05
 	panel.GroupTransparency = 1
 	panel.BorderSizePixel = 0
 	panel.ClipsDescendants = true
 	panel.ZIndex = Z.Modal
 	panel.Parent = root
+	panel:SetAttribute("VVindInterfacePanel", true)
+	panel:SetAttribute("VVindWindowId", self_._id)
 	Corner(panel, 14)
-	Stroke(panel, Color3.new(1, 1, 1), 1, 0.8)
+	Stroke(panel, VVindUI.Theme.Border, 1, 0.8)
 	GlassLayer(panel, 14, 0.985)
  
 	scale = Instance.new("UIScale")
@@ -7579,7 +7936,7 @@ function Window:_OpenSearch()
 	closeBtn.Name = "CloseButton"
 	closeBtn.Text = ""
 	closeBtn.AutoButtonColor = false
-	closeBtn.BackgroundColor3 = Color3.new(1, 1, 1)
+	closeBtn.BackgroundColor3 = VVindUI.Theme.Surface
 	closeBtn.BackgroundTransparency = 1
 	closeBtn.BorderSizePixel = 0
 	closeBtn.AnchorPoint = Vector2.new(1, 0.5)
@@ -7627,7 +7984,7 @@ function Window:_OpenSearch()
  
 	local divider = Instance.new("Frame")
 	divider.Name = "Divider"
-	divider.BackgroundColor3 = Color3.new(1, 1, 1)
+	divider.BackgroundColor3 = VVindUI.Theme.Surface
 	divider.BackgroundTransparency = 0.92
 	divider.BorderSizePixel = 0
 	divider.Position = UDim2.new(0, 0, 0, HEADER_H)
@@ -7710,7 +8067,7 @@ function Window:_OpenSearch()
 			local row = Instance.new("TextButton")
 			row.Text = ""
 			row.AutoButtonColor = false
-			row.BackgroundColor3 = Color3.new(1, 1, 1)
+			row.BackgroundColor3 = VVindUI.Theme.Surface
 			row.BackgroundTransparency = 1
 			row.BorderSizePixel = 0
 			row.Size = UDim2.new(1, 0, 0, ROW_H)
@@ -7852,7 +8209,7 @@ function Tab:AddSubTab(nameOrOpts)
  
 		self._subTabIndicator = Instance.new("Frame")
 		self._subTabIndicator.Name = "Indicator"
-		self._subTabIndicator.BackgroundColor3 = Color3.new(1, 1, 1)
+		self._subTabIndicator.BackgroundColor3 = VVindUI.Theme.Surface
 		self._subTabIndicator.BackgroundTransparency = 1
 		self._subTabIndicator.BorderSizePixel = 0
 		self._subTabIndicator.ZIndex = Z.Window
@@ -7961,7 +8318,7 @@ function Tab:AddSubTab(nameOrOpts)
 	btn.Name = "SubTab_" .. title:gsub("%s", "")
 	btn.Text = ""
 	btn.AutoButtonColor = false
-	btn.BackgroundColor3 = Color3.new(1, 1, 1)
+	btn.BackgroundColor3 = VVindUI.Theme.Surface
 	btn.BackgroundTransparency = 1
 	btn.BorderSizePixel = 0
 	btn.AutomaticSize = Enum.AutomaticSize.X
@@ -8190,14 +8547,37 @@ local function ValidateConfigFlag(api, value)
 	if kind == "Textbox" then return type(value) == "string", value, "expected a string" end
 	if kind == "ColorPicker" then return typeof(value) == "Color3", value, "expected a Color3" end
 	if kind == "Keybind" then
-		if type(value) == "table" and type(value.key) == "string" then
-			if value.key == "" or value.key == "None" or value.key == "nil" then return true, nil end
-			local enumType, keyName = value.key:match("^Enum%.([%w_]+)%.([%w_]+)$")
-			keyName = keyName or value.key
-			local ok, key = pcall(function() return Enum[enumType or "KeyCode"][keyName] end)
-			if ok and typeof(key) == "EnumItem" then value = key end
+		if type(value) == "table" then
+			local keyValue = value.key
+			if keyValue == nil then keyValue = value.Key end
+			if keyValue == nil and type(api.Get) == "function" then
+				local ok, current = pcall(api.Get, api)
+				if ok then keyValue = current end
+			end
+			local key, keyErr = ResolveKeybindKey(keyValue)
+			if keyErr then return false, nil, keyErr end
+			local mode = value.mode or value.Mode or api.Mode or "Press"
+			if mode ~= "Press" and mode ~= "Toggle" and mode ~= "Hold" and mode ~= "Always" then
+				return false, nil, "mode must be Press, Toggle, Hold, or Always"
+			end
+			local active = value.active
+			if active == nil then active = value.Active end
+			if active == nil and type(api.GetActive) == "function" then
+				local ok, current = pcall(api.GetActive, api)
+				if ok then active = current end
+			end
+			if active ~= nil and type(active) ~= "boolean" then return false, nil, "active must be a boolean" end
+			local context = value.context or value.Context or api.Context or "global"
+			if type(context) ~= "string" or context:gsub("%s", "") == "" then
+				return false, nil, "context must be a non-empty string"
+			end
+			if mode == "Always" then active = true end
+			if mode == "Hold" or mode == "Press" then active = false end
+			return true, { key = key or "NONE", mode = mode, context = context, active = active == true }
 		end
-		return value == nil or typeof(value) == "EnumItem", value, "expected an EnumItem or nil"
+		local key, keyErr = ResolveKeybindKey(value)
+		if keyErr then return false, nil, keyErr end
+		return true, key
 	end
 	if kind == "Dropdown" then
 		local ok, current = pcall(api.Get)
@@ -8226,6 +8606,17 @@ local function RegisterFlag(opts, api, kind, validator)
 			error("Control Flag must be a non-empty string", 2)
 		end
 		if VVindUI.Flags[flag] then error("duplicate flag '" .. flag .. "'", 2) end
+		if type(api.Set) == "function" then
+			local set = api.Set
+			api.Set = function(control, ...)
+				local previousSource = VVindUI._ChangeSource
+				if previousSource == nil then VVindUI._ChangeSource = "code" end
+				local results = table.pack(pcall(set, control, ...))
+				VVindUI._ChangeSource = previousSource
+				if not results[1] then error(results[2], 2) end
+				return table.unpack(results, 2, results.n)
+			end
+		end
 		api.Flag = flag
 		api.Kind = kind
 		api.Label = opts.Text or opts.Label or flag
@@ -8233,8 +8624,9 @@ local function RegisterFlag(opts, api, kind, validator)
 		VVindUI.Flags[flag] = api
 		VVindUI.ConfigFlags[flag] = api.Set
 		VVindUI.ConfigValidators[flag] = api.ValidateConfig
-		if type(api.OnChanged) == "function" then
-			local ok, connection = pcall(api.OnChanged, api, function()
+		local configChangeHook = api.OnStateChanged or api.OnChanged
+		if type(configChangeHook) == "function" then
+			local ok, connection = pcall(configChangeHook, api, function()
 				if not VVindUI._ApplyingConfig and VVindUI.QueueAutoConfigSave then
 					VVindUI:QueueAutoConfigSave(flag)
 				end
@@ -8260,51 +8652,103 @@ local function RegisterFlag(opts, api, kind, validator)
 	return api
 end
  
-function Tab:AddLabel(text)
+function Tab:AddLabel(textOrOptions)
+	local opts = type(textOrOptions) == "table" and textOrOptions or { Text = textOrOptions }
 	local label = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
 	label.FontFace = VVindUI.Theme.FontRegular
-	label.Text = text
-	label.TextColor3 = VVindUI.Theme.TextDim
+	label.Text = tostring(opts.Text or "")
+	label.RichText = opts.RichText == true
+	label.TextColor3 = typeof(opts.Color) == "Color3" and opts.Color or VVindUI.Theme.TextDim
 	label.TextSize = 13
-	label.TextWrapped = true
+	label.TextWrapped = opts.TextWrapped ~= false
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.AutomaticSize = Enum.AutomaticSize.Y
 	label.Size = UDim2.new(1, 0, 0, 16)
 	label.ZIndex = Z.Content
 	label.Parent = self._page
+	if typeof(opts.Color) == "Color3" then label:SetAttribute("VVindThemeColorExempt", true) end
+	local function set(value)
+		if type(value) == "table" then
+			if value.Text ~= nil then label.Text = tostring(value.Text) end
+			if value.RichText ~= nil then label.RichText = value.RichText == true end
+			if value.TextWrapped ~= nil then label.TextWrapped = value.TextWrapped == true end
+			if typeof(value.Color) == "Color3" then
+				label.TextColor3 = value.Color
+				label:SetAttribute("VVindThemeColorExempt", true)
+			end
+		else
+			label.Text = tostring(value or "")
+		end
+	end
  
 	return {
 		Instance = label,
-		Set = function(_, v) label.Text = v end,
+		Set = function(_, value) set(value) end,
 		Get = function() return label.Text end,
+		SetColor = function(_, color)
+			if typeof(color) == "Color3" then
+				label.TextColor3 = color
+				label:SetAttribute("VVindThemeColorExempt", true)
+			end
+		end,
 		Destroy = function() label:Destroy() end,
 	}
 end
  
 function Tab:AddSection(textOrOpts, maybeIcon)
 	local opts = type(textOrOpts) == "table" and textOrOpts or { Text = textOrOpts, Icon = maybeIcon }
-	local text = opts.Text or "Section"
+	local text = tostring(opts.Text or "Section")
 	local iconAsset = opts.Icon and ResolveIcon(opts.Icon) or ""
+	local columnCount = (opts.Columns == true and 2) or math.clamp(tonumber(opts.Columns) or 1, 1, 2)
+	local windowId = self._window and self._window._id
  
 	local holder = Instance.new("Frame")
 	holder.Name = "Section"
-	holder.BackgroundTransparency = 1
-	holder.Size = UDim2.new(1, 0, 0, 24)
+	holder.BackgroundColor3 = VVindUI.Theme.Surface
+	holder.BackgroundTransparency = self._window and self._window._interfaceTransparency or 0.72
+	holder.AutomaticSize = Enum.AutomaticSize.Y
+	holder.Size = UDim2.new(1, 0, 0, 0)
 	holder.ZIndex = Z.Content
 	holder.Parent = self._page
+	holder:SetAttribute("VVindInterfacePanel", true)
+	if windowId then holder:SetAttribute("VVindWindowId", windowId) end
+	Corner(holder, VVindUI.Theme.CornerRadiusSm)
+	Stroke(holder, VVindUI.Theme.Border, 1, 0.92)
+
+	local padding = Instance.new("UIPadding")
+	padding.PaddingTop = UDim.new(0, 7)
+	padding.PaddingBottom = UDim.new(0, 9)
+	padding.PaddingLeft = UDim.new(0, 10)
+	padding.PaddingRight = UDim.new(0, 10)
+	padding.Parent = holder
+
+	local holderLayout = Instance.new("UIListLayout")
+	holderLayout.Padding = UDim.new(0, 7)
+	holderLayout.SortOrder = Enum.SortOrder.LayoutOrder
+	holderLayout.Parent = holder
  
-	local x = 2
+	local header = Instance.new("TextButton")
+	header.Name = "Header"
+	header.AutoButtonColor = false
+	header.BackgroundTransparency = 1
+	header.Size = UDim2.new(1, 0, 0, 22)
+	header.Text = ""
+	header.LayoutOrder = 1
+	header.ZIndex = Z.Content + 1
+	header.Parent = holder
+
+	local x = 0
 	if iconAsset ~= "" then
 		local img = Instance.new("ImageLabel")
 		img.BackgroundTransparency = 1
 		img.Image = iconAsset
 		img.ImageColor3 = VVindUI.Theme.TextDim
 		img.Size = UDim2.fromOffset(13, 13)
-		img.Position = UDim2.fromOffset(2, 8)
-		img.ZIndex = Z.Content + 1
-		img.Parent = holder
-		x = 2 + 13 + 7
+		img.Position = UDim2.fromOffset(0, 4)
+		img.ZIndex = Z.Content + 2
+		img.Parent = header
+		x = 13 + 7
 	end
  
 	local label = Instance.new("TextLabel")
@@ -8315,16 +8759,140 @@ function Tab:AddSection(textOrOpts, maybeIcon)
 	label.TextSize = 12
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.TextTruncate = Enum.TextTruncate.AtEnd
-	label.Position = UDim2.fromOffset(x, 8)
+	label.Position = UDim2.fromOffset(x, 4)
 	label.Size = UDim2.new(1, -(x + 2), 0, 14)
-	label.ZIndex = Z.Content + 1
-	label.Parent = holder
- 
-	return {
+	label.ZIndex = Z.Content + 2
+	label.Parent = header
+
+	local collapseIcon
+	if opts.Collapsible then
+		collapseIcon = Instance.new("ImageLabel")
+		collapseIcon.Name = "CollapseIcon"
+		collapseIcon.BackgroundTransparency = 1
+		collapseIcon.Image = ResolveIcon("chevron-down")
+		collapseIcon.ImageColor3 = VVindUI.Theme.TextDim
+		collapseIcon.Size = UDim2.fromOffset(13, 13)
+		collapseIcon.AnchorPoint = Vector2.new(1, 0.5)
+		collapseIcon.Position = UDim2.new(1, 0, 0.5, 0)
+		collapseIcon.ZIndex = Z.Content + 2
+		collapseIcon.Parent = header
+		label.Size = UDim2.new(1, -(x + 22), 0, 14)
+	end
+
+	local body = Instance.new("Frame")
+	body.Name = "SectionContent"
+	body.BackgroundTransparency = 1
+	body.AutomaticSize = Enum.AutomaticSize.Y
+	body.Size = UDim2.new(1, 0, 0, 0)
+	body.LayoutOrder = 2
+	body.ZIndex = Z.Content + 1
+	body.Parent = holder
+
+	local columns = {}
+	for i = 1, columnCount do
+		local column = Instance.new("Frame")
+		column.Name = "Column" .. i
+		column.BackgroundTransparency = 1
+		column.AutomaticSize = Enum.AutomaticSize.Y
+		column.ZIndex = Z.Content + 1
+		if columnCount == 1 then
+			column.Size = UDim2.new(1, 0, 0, 0)
+		else
+			column.Size = UDim2.new(0.5, -4, 0, 0)
+			column.Position = UDim2.new((i - 1) * 0.5, (i - 1) * 8, 0, 0)
+		end
+		column.Parent = body
+		local columnLayout = Instance.new("UIListLayout")
+		columnLayout.Padding = UDim.new(0, 7)
+		columnLayout.SortOrder = Enum.SortOrder.LayoutOrder
+		columnLayout.Parent = column
+		columns[i] = column
+	end
+
+	local collapsed = opts.Collapsible == true and opts.Collapsed == true
+	body.Visible = not collapsed
+	if collapseIcon and collapsed then collapseIcon.Rotation = -90 end
+	local section = {
 		Instance = holder,
-		Set = function(_, v) label.Text = string.upper(v) end,
-		Destroy = function() holder:Destroy() end,
+		Name = text,
+		_page = self._page,
+		_columns = columns,
+		_controls = {},
+		_columnOrders = {},
+		_columnCount = columnCount,
+		_nextColumn = 1,
+		_window = self._window,
+		_janitor = self._janitor,
+		_group = self._group,
+		_button = self._button,
+		_select = self._select,
+		_parentTab = self._parentTab,
+		_parentTabName = self._parentTabName,
+		_subTabIdx = self._subTabIdx,
+		Collapsed = collapsed,
+		Set = function(_, value) label.Text = string.upper(tostring(value or "")) end,
+		SetColumn = function(self, index)
+			index = math.floor(tonumber(index) or 1)
+			if index < 1 or index > self._columnCount then return false end
+			self._nextColumn = index
+			return true
+		end,
+		SetCollapsed = function(self, value)
+			self.Collapsed = value == true
+			body.Visible = not self.Collapsed
+			if self.Collapsed then
+				holder.AutomaticSize = Enum.AutomaticSize.None
+				holder.Size = UDim2.new(1, 0, 0, 38)
+			else
+				holder.AutomaticSize = Enum.AutomaticSize.Y
+				holder.Size = UDim2.new(1, 0, 0, 0)
+			end
+			if collapseIcon then collapseIcon.Rotation = self.Collapsed and -90 or 0 end
+		end,
+		ToggleCollapsed = function(self)
+			self:SetCollapsed(not self.Collapsed)
+		end,
+		Destroy = function(self)
+			for index = #self._controls, 1, -1 do
+				local control = self._controls[index]
+				if control and type(control.Destroy) == "function" then pcall(control.Destroy, control) end
+			end
+			table.clear(self._controls)
+			holder:Destroy()
+		end,
 	}
+	if collapsed then section:SetCollapsed(true) end
+	setmetatable(section, {
+		__index = function(self, key)
+			if key == "AddSection" then return nil end
+			local method = Tab[key]
+			if type(method) ~= "function" then return method end
+			return function(sectionSelf, ...)
+				local oldPage = sectionSelf._page
+				local columnIndex = sectionSelf._nextColumn or 1
+				sectionSelf._nextColumn = columnIndex % sectionSelf._columnCount + 1
+				sectionSelf._page = sectionSelf._columns[columnIndex] or sectionSelf._columns[1]
+				local arguments = table.pack(...)
+				local results = table.pack(pcall(method, sectionSelf, table.unpack(arguments, 1, arguments.n)))
+				sectionSelf._page = oldPage
+				if not results[1] then error(results[2], 2) end
+				local control = results[2]
+				if type(control) == "table" and type(control.Destroy) == "function" then
+					table.insert(sectionSelf._controls, control)
+					local columnOrders = sectionSelf._columnOrders
+					columnOrders[columnIndex] = (columnOrders[columnIndex] or 0) + 1
+					if typeof(control.Instance) == "Instance" then
+						pcall(function() control.Instance.LayoutOrder = columnOrders[columnIndex] end)
+					end
+				end
+				return table.unpack(results, 2, results.n)
+			end
+		end,
+	})
+	if opts.Collapsible then
+		header.MouseButton1Click:Connect(function() section:ToggleCollapsed() end)
+	end
+	return section
 end
  
 function Tab:AddDivider()
@@ -8339,7 +8907,7 @@ function Tab:AddDivider()
 	line.AnchorPoint = Vector2.new(0, 0.5)
 	line.Position = UDim2.new(0, 0, 0.5, 0)
 	line.Size = UDim2.new(1, 0, 0, 1)
-	line.BackgroundColor3 = Color3.new(1, 1, 1)
+	line.BackgroundColor3 = VVindUI.Theme.Surface
 	line.BackgroundTransparency = 0.92
 	line.BorderSizePixel = 0
 	line.ZIndex = Z.Content
@@ -8365,7 +8933,7 @@ function Tab:AddLineText(text)
 	left.AnchorPoint = Vector2.new(0, 0.5)
 	left.Position = UDim2.fromScale(0, 0.5)
 	left.Size = UDim2.new(0.5, -10, 0, 1)
-	left.BackgroundColor3 = Color3.new(1, 1, 1)
+	left.BackgroundColor3 = VVindUI.Theme.Surface
 	left.BackgroundTransparency = 0.92
 	left.BorderSizePixel = 0
 	left.ZIndex = Z.Content
@@ -8376,7 +8944,7 @@ function Tab:AddLineText(text)
 	right.AnchorPoint = Vector2.new(1, 0.5)
 	right.Position = UDim2.fromScale(1, 0.5)
 	right.Size = UDim2.new(0.5, -10, 0, 1)
-	right.BackgroundColor3 = Color3.new(1, 1, 1)
+	right.BackgroundColor3 = VVindUI.Theme.Surface
 	right.BackgroundTransparency = 0.92
 	right.BorderSizePixel = 0
 	right.ZIndex = Z.Content
@@ -8496,21 +9064,43 @@ function Tab:AddParagraph(opts)
 	textLabel.BackgroundTransparency = 1
 	textLabel.FontFace = VVindUI.Theme.FontRegular
 	textLabel.Text = opts.Text or ""
-	textLabel.TextColor3 = VVindUI.Theme.TextDim
+	textLabel.RichText = opts.RichText == true
+	textLabel.TextColor3 = typeof(opts.Color) == "Color3" and opts.Color or VVindUI.Theme.TextDim
 	textLabel.TextSize = 13
-	textLabel.TextWrapped = true
+	textLabel.TextWrapped = opts.TextWrapped ~= false
 	textLabel.TextXAlignment = Enum.TextXAlignment.Left
 	textLabel.AutomaticSize = Enum.AutomaticSize.Y
 	textLabel.Size = UDim2.new(1, 0, 0, 16)
 	textLabel.LayoutOrder = 2
 	textLabel.ZIndex = Z.Content + 1
 	textLabel.Parent = card
- 
+	if typeof(opts.Color) == "Color3" then textLabel:SetAttribute("VVindThemeColorExempt", true) end
+
+	local function update(value)
+		if type(value) == "table" then
+			if value.Text ~= nil then textLabel.Text = tostring(value.Text) end
+			if value.Title ~= nil and titleLabel then titleLabel.Text = tostring(value.Title) end
+			if value.RichText ~= nil then textLabel.RichText = value.RichText == true end
+			if value.TextWrapped ~= nil then textLabel.TextWrapped = value.TextWrapped == true end
+			if typeof(value.Color) == "Color3" then
+				textLabel.TextColor3 = value.Color
+				textLabel:SetAttribute("VVindThemeColorExempt", true)
+			end
+		else
+			textLabel.Text = tostring(value or "")
+		end
+	end
 	return {
 		Instance = card,
-		Set = function(_, v) textLabel.Text = v end,
+		Set = function(_, value) update(value) end,
 		Get = function() return textLabel.Text end,
 		SetTitle = function(_, v) if titleLabel then titleLabel.Text = v end end,
+		SetColor = function(_, color)
+			if typeof(color) == "Color3" then
+				textLabel.TextColor3 = color
+				textLabel:SetAttribute("VVindThemeColorExempt", true)
+			end
+		end,
 		Destroy = function() card:Destroy() end,
 	}
 end
@@ -8842,14 +9432,14 @@ local function BuildFeedbackRow(parent, layoutOrder, rowH, placeholder, buttonIc
  
 	local pill = Instance.new("Frame")
 	pill.Name = "Pill"
-	pill.BackgroundColor3 = Color3.new(1, 1, 1)
+	pill.BackgroundColor3 = VVindUI.Theme.Surface
 	pill.BackgroundTransparency = 0.95
 	pill.BorderSizePixel = 0
 	pill.Size = UDim2.new(1, -(rowH + 6), 1, 0)
 	pill.ZIndex = Z.Content + 1
 	pill.Parent = row
 	Corner(pill, 9)
-	local pillStroke = Stroke(pill, Color3.new(1, 1, 1), 1, 0.9)
+	local pillStroke = Stroke(pill, VVindUI.Theme.Border, 1, 0.9)
  
 	local pillPad = Instance.new("UIPadding")
 	pillPad.PaddingLeft = UDim.new(0, 10)
@@ -8861,7 +9451,7 @@ local function BuildFeedbackRow(parent, layoutOrder, rowH, placeholder, buttonIc
 	box.ClearTextOnFocus = false
 	box.FontFace = VVindUI.Theme.FontRegular
 	box.PlaceholderText = placeholder or "Give us some feedback!"
-	box.PlaceholderColor3 = Color3.fromRGB(120, 120, 122)
+	box.PlaceholderColor3 = VVindUI.Theme.TextDim
 	box.Text = ""
 	box.TextColor3 = VVindUI.Theme.Text
 	box.TextSize = 13
@@ -8877,14 +9467,14 @@ local function BuildFeedbackRow(parent, layoutOrder, rowH, placeholder, buttonIc
 		Tween(pillStroke, { Color = VVindUI.Theme.Accent, Transparency = 0.3 }, 0.15)
 	end)
 	box.FocusLost:Connect(function()
-		Tween(pillStroke, { Color = Color3.new(1, 1, 1), Transparency = 0.9 }, 0.15)
+		Tween(pillStroke, { Color = VVindUI.Theme.Border, Transparency = 0.9 }, 0.15)
 	end)
  
 	local sendBtn = Instance.new("TextButton")
 	sendBtn.Name = "Send"
 	sendBtn.Text = ""
 	sendBtn.AutoButtonColor = false
-	sendBtn.BackgroundColor3 = Color3.new(1, 1, 1)
+	sendBtn.BackgroundColor3 = VVindUI.Theme.Surface
 	sendBtn.BackgroundTransparency = 0.9
 	sendBtn.BorderSizePixel = 0
 	sendBtn.AnchorPoint = Vector2.new(1, 0)
@@ -9072,7 +9662,7 @@ function Tab:AddCard(opts)
 		imgHolder.ZIndex = Z.Content + 1
 		imgHolder.Parent = card
 		Corner(imgHolder, VVindUI.Theme.CornerRadiusSm)
-		Stroke(imgHolder, Color3.new(1, 1, 1), 1, 0.85)
+		Stroke(imgHolder, VVindUI.Theme.Border, 1, 0.85)
  
 		local img = Instance.new("ImageLabel")
 		img.BackgroundTransparency = 1
@@ -9147,7 +9737,7 @@ function Tab:AddCard(opts)
 		footerBtn.Name = "FooterButton"
 		footerBtn.Text = ""
 		footerBtn.AutoButtonColor = false
-		footerBtn.BackgroundColor3 = Color3.new(1, 1, 1)
+		footerBtn.BackgroundColor3 = VVindUI.Theme.Surface
 		footerBtn.BackgroundTransparency = 0.85
 		footerBtn.BorderSizePixel = 0
 		footerBtn.Position = UDim2.new(0, 10, 1, -(BUTTON_H + BUTTON_MARGIN))
@@ -9155,7 +9745,7 @@ function Tab:AddCard(opts)
 		footerBtn.ZIndex = Z.Content + 1
 		footerBtn.Parent = card
 		Corner(footerBtn, 8)
-		local footerStroke = Stroke(footerBtn, Color3.new(1, 1, 1), 1, 0.85)
+		local footerStroke = Stroke(footerBtn, VVindUI.Theme.Border, 1, 0.85)
  
 		local footerLabel = Instance.new("TextLabel")
 		footerLabel.BackgroundTransparency = 1
@@ -9198,7 +9788,7 @@ function Tab:AddCard(opts)
  
 		local divider = Instance.new("Frame")
 		divider.Name = "Divider"
-		divider.BackgroundColor3 = Color3.new(1, 1, 1)
+		divider.BackgroundColor3 = VVindUI.Theme.Surface
 		divider.BackgroundTransparency = 0.94
 		divider.BorderSizePixel = 0
 		divider.Size = UDim2.new(1, 0, 0, 1)
@@ -9428,7 +10018,7 @@ function Tab:AddChangelogEntry(opts)
 		if i < #changes then
 			local separator = Instance.new("Frame")
 			separator.Name = "Separator" .. i
-			separator.BackgroundColor3 = Color3.new(1, 1, 1)
+			separator.BackgroundColor3 = VVindUI.Theme.Surface
 			separator.BackgroundTransparency = 0.93
 			separator.BorderSizePixel = 0
 			separator.Size = UDim2.new(1, 0, 0, 1)
@@ -9512,7 +10102,7 @@ function Tab:AddLoadoutGroup(opts)
 	for i, iconAsset in ipairs(icons) do
 		local slot = Instance.new("Frame")
 		slot.Name = "Slot" .. i
-		slot.BackgroundColor3 = Color3.new(1, 1, 1)
+		slot.BackgroundColor3 = VVindUI.Theme.Surface
 		slot.BackgroundTransparency = 0.95
 		slot.BorderSizePixel = 0
 		slot.ClipsDescendants = true
@@ -9521,7 +10111,7 @@ function Tab:AddLoadoutGroup(opts)
 		slot.ZIndex = Z.Content + 2
 		slot.Parent = iconsRow
 		Corner(slot, VVindUI.Theme.CornerRadiusSm)
-		Stroke(slot, Color3.new(1, 1, 1), 1, 0.94)
+		Stroke(slot, VVindUI.Theme.Border, 1, 0.94)
  
 		local img = Instance.new("ImageLabel")
 		img.BackgroundTransparency = 1
@@ -9538,7 +10128,7 @@ function Tab:AddLoadoutGroup(opts)
 	btn.Name = "EquipButton"
 	btn.Text = ""
 	btn.AutoButtonColor = false
-	btn.BackgroundColor3 = Color3.new(1, 1, 1)
+	btn.BackgroundColor3 = VVindUI.Theme.Surface
 	btn.BackgroundTransparency = 0.92
 	btn.BorderSizePixel = 0
 	btn.Position = UDim2.fromOffset(0, HEADER_H + GAP1 + ICON_SIZE + GAP2)
@@ -9672,7 +10262,7 @@ function Tab:AddInfoGrid(opts)
 		for i, item in ipairs(items) do
 			local chip = Instance.new("Frame")
 			chip.Name = "Chip" .. i
-			chip.BackgroundColor3 = Color3.new(1, 1, 1)
+			chip.BackgroundColor3 = VVindUI.Theme.Surface
 			chip.BackgroundTransparency = 0.95
 			chip.BorderSizePixel = 0
 			chip.LayoutOrder = i
@@ -9819,7 +10409,7 @@ function Tab:AddGradientCard(opts)
 	titleLabel.BackgroundTransparency = 1
 	titleLabel.FontFace = VVindUI.Theme.Font
 	titleLabel.Text = title
-	titleLabel.TextColor3 = Color3.new(1, 1, 1)
+	titleLabel.TextColor3 = VVindUI.Theme.Text
 	titleLabel.TextSize = 14
 	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
 	titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
@@ -9833,7 +10423,7 @@ function Tab:AddGradientCard(opts)
 		descLabel.BackgroundTransparency = 1
 		descLabel.FontFace = VVindUI.Theme.FontRegular
 		descLabel.Text = opts.Description
-		descLabel.TextColor3 = Color3.new(1, 1, 1)
+		descLabel.TextColor3 = VVindUI.Theme.Text
 		descLabel.TextTransparency = 0.3
 		descLabel.TextSize = 12
 		descLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -9848,7 +10438,7 @@ function Tab:AddGradientCard(opts)
 		local chev = Instance.new("ImageLabel")
 		chev.BackgroundTransparency = 1
 		chev.Image = ResolveIcon("chevron-right")
-		chev.ImageColor3 = Color3.new(1, 1, 1)
+		chev.ImageColor3 = VVindUI.Theme.Text
 		chev.ImageTransparency = 0.2
 		chev.Size = UDim2.fromOffset(14, 14)
 		chev.AnchorPoint = Vector2.new(1, 0.5)
@@ -9858,7 +10448,7 @@ function Tab:AddGradientCard(opts)
  
 		local veil = Instance.new("Frame")
 		veil.Name = "HoverVeil"
-		veil.BackgroundColor3 = Color3.new(1, 1, 1)
+		veil.BackgroundColor3 = VVindUI.Theme.Surface
 		veil.BackgroundTransparency = 1
 		veil.BorderSizePixel = 0
 		veil.Size = UDim2.fromScale(1, 1)
@@ -9909,7 +10499,7 @@ function Tab:AddToggle(opts)
 	switchBg.AnchorPoint = Vector2.new(1, 0.5)
 	switchBg.Position = UDim2.new(1, -14, 0.5, 0)
 	switchBg.Size = UDim2.fromOffset(40, 22)
-	switchBg.BackgroundColor3 = state and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(46, 50, 49)
+	switchBg.BackgroundColor3 = state and VVindUI.Theme.Accent or VVindUI.Theme.Surface
 	switchBg.BackgroundTransparency = state and 0 or 0.32
 	switchBg.BorderSizePixel = 0
 	switchBg.ZIndex = Z.Content + 1
@@ -9920,7 +10510,7 @@ function Tab:AddToggle(opts)
 	-- through the control instead of turning into a flat gray pill.
 	local switchStroke = Stroke(
 		switchBg,
-		state and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(205, 212, 209),
+		state and VVindUI.Theme.Accent or VVindUI.Theme.Border,
 		1,
 		state and 0.88 or 0.72
 	)
@@ -9928,8 +10518,8 @@ function Tab:AddToggle(opts)
 	local switchGradient = Instance.new("UIGradient")
 	switchGradient.Rotation = 90
 	switchGradient.Color = ColorSequence.new({
-		ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-		ColorSequenceKeypoint.new(1, Color3.fromRGB(190, 198, 194)),
+		ColorSequenceKeypoint.new(0, VVindUI.Theme.Accent),
+		ColorSequenceKeypoint.new(1, VVindUI.Theme.TextDim),
 	})
 	switchGradient.Transparency = NumberSequence.new({
 		NumberSequenceKeypoint.new(0, state and 0 or 0.76),
@@ -9945,7 +10535,7 @@ function Tab:AddToggle(opts)
 	knob.Size = UDim2.fromOffset(16, 16)
 	knob.Position = state and UDim2.new(1, -19, 0.5, 0) or UDim2.new(0, 3, 0.5, 0)
 	knob.AnchorPoint = Vector2.new(0, 0.5)
-	knob.BackgroundColor3 = state and Color3.fromRGB(18, 18, 18) or Color3.fromRGB(226, 230, 228)
+	knob.BackgroundColor3 = state and VVindUI.Theme.Background or VVindUI.Theme.Text
 	knob.BackgroundTransparency = state and 0 or 0.06
 	knob.BorderSizePixel = 0
 	knob.ZIndex = Z.Content + 2
@@ -9964,11 +10554,11 @@ function Tab:AddToggle(opts)
 		local anim = 0.28
 		local style, dir = Enum.EasingStyle.Quint, Enum.EasingDirection.InOut
 		Tween(switchBg, {
-			BackgroundColor3 = state and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(46, 50, 49),
+			BackgroundColor3 = state and VVindUI.Theme.Accent or VVindUI.Theme.Surface,
 			BackgroundTransparency = state and 0 or 0.32,
 		}, anim, style, dir)
 		Tween(switchStroke, {
-			Color = state and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(205, 212, 209),
+			Color = state and VVindUI.Theme.Accent or VVindUI.Theme.Border,
 			Transparency = state and 0.88 or 0.72,
 		}, anim, style, dir)
 		switchGradient.Transparency = NumberSequence.new({
@@ -9976,7 +10566,7 @@ function Tab:AddToggle(opts)
 			NumberSequenceKeypoint.new(1, state and 0 or 0.94),
 		})
 		Tween(knob, {
-			BackgroundColor3 = state and Color3.fromRGB(18, 18, 18) or Color3.fromRGB(226, 230, 228),
+			BackgroundColor3 = state and VVindUI.Theme.Background or VVindUI.Theme.Text,
 			BackgroundTransparency = state and 0 or 0.06,
 			Position = state and UDim2.new(1, -19, 0.5, 0) or UDim2.new(0, 3, 0.5, 0),
 		}, anim, style, dir)
@@ -9984,8 +10574,9 @@ function Tab:AddToggle(opts)
  
 	local signal = MakeSignal()
 	local function fireChanged(newState)
-		if opts.Callback then task.spawn(opts.Callback, newState) end
-		signal.Fire(newState)
+		local info = ChangeInfo()
+		if opts.Callback then task.spawn(opts.Callback, newState, info) end
+		signal.Fire(newState, info)
 	end
  
 	local locked = opts.Locked == true
@@ -10107,7 +10698,7 @@ function Tab:AddSlider(opts)
 	track.Size = UDim2.new(1, -28, 0, 6)
 	-- Nearly transparent white overlay: no gray tint, so the window background
 	-- remains visible through the unfilled portion of the slider.
-	track.BackgroundColor3 = Color3.new(1, 1, 1)
+	track.BackgroundColor3 = VVindUI.Theme.Surface
 	track.BackgroundTransparency = 0.91
 	track.BorderSizePixel = 0
 	track.ZIndex = Z.Content + 1
@@ -10115,7 +10706,7 @@ function Tab:AddSlider(opts)
 	Corner(track, 3)
  
 	local fill = Instance.new("Frame")
-	fill.BackgroundColor3 = Color3.new(1, 1, 1)
+	fill.BackgroundColor3 = VVindUI.Theme.Accent
 	fill.BackgroundTransparency = 0
 	fill.BorderSizePixel = 0
 	fill.Size = UDim2.new(SafeAlpha(value, min, max), 0, 1, 0)
@@ -10127,13 +10718,13 @@ function Tab:AddSlider(opts)
 	knob.AnchorPoint = Vector2.new(0.5, 0.5)
 	knob.Position = UDim2.new(SafeAlpha(value, min, max), 0, 0.5, 0)
 	knob.Size = UDim2.fromOffset(12, 12)
-	knob.BackgroundColor3 = Color3.new(1, 1, 1)
+	knob.BackgroundColor3 = VVindUI.Theme.Text
 	knob.BackgroundTransparency = 0
 	knob.BorderSizePixel = 0
 	knob.ZIndex = Z.Content + 3
 	knob.Parent = track
 	Corner(knob, 6)
-	Stroke(knob, Color3.fromRGB(16, 16, 16), 2, 0)
+	Stroke(knob, VVindUI.Theme.Background, 2, 0)
  
 	if hasDesc then
 		local lastW = -1
@@ -10163,8 +10754,9 @@ function Tab:AddSlider(opts)
  
 	local signal = MakeSignal()
 	local function fireChanged(v)
-		if opts.Callback then task.spawn(opts.Callback, v) end
-		signal.Fire(v)
+		local info = ChangeInfo()
+		if opts.Callback then task.spawn(opts.Callback, v, info) end
+		signal.Fire(v, info)
 	end
  
 	local function setValueLabel()
@@ -10318,49 +10910,82 @@ end
  
 function Tab:AddDropdown(opts)
 	opts = opts or {}
-	local options = opts.Options or {}
+	local function normalizeOptions(list)
+		assert(type(list) == "table", "Dropdown Options must be an array")
+		local normalized, seen = {}, {}
+		for index, option in ipairs(list) do
+			local value, label
+			if type(option) == "table" then
+				value = option.Value
+				label = option.Label
+			else
+				value = option
+			end
+			assert(type(value) == "string" or type(value) == "number", "Dropdown option Value must be a string or number")
+			assert(not seen[value], "Dropdown option values must be unique")
+			seen[value] = true
+			table.insert(normalized, { Value = value, Label = tostring(label ~= nil and label or value), Index = index })
+		end
+		return normalized
+	end
+	local options = normalizeOptions(opts.Options or {})
 	local isMulti = opts.MultiSelect == true
 	local hasDesc = opts.Description and opts.Description ~= ""
 	local height = hasDesc and 56 or 44
 	local jan = self._janitor
+	local function optionValue(option) return option.Value end
+	local function findOption(value)
+		for _, option in ipairs(options) do
+			if option.Value == value then return option end
+		end
+	end
+	local function hasOption(value) return findOption(value) ~= nil end
  
 	local selected
 	if isMulti then
 		selected = {}
 		if type(opts.Default) == "table" then
-			for _, v in ipairs(opts.Default) do selected[v] = true end
+			for _, v in ipairs(opts.Default) do if hasOption(v) then selected[v] = true end end
 		end
 	else
-		selected = opts.Default or options[1]
+		selected = hasOption(opts.Default) and opts.Default or (options[1] and optionValue(options[1]))
 	end
  
 	local signal = MakeSignal()
-	local function fireChanged(newValue)
-		if opts.Callback then task.spawn(opts.Callback, newValue) end
-		signal.Fire(newValue)
+	local function fireChanged(newValue, source)
+		local info = ChangeInfo()
+		if source then info.Source = source end
+		if opts.Callback then task.spawn(opts.Callback, newValue, info) end
+		signal.Fire(newValue, info)
 	end
  
 	local function getSelectedList()
 		local list = {}
-		for _, name in ipairs(options) do
-			if isMulti and selected[name] then table.insert(list, name) end
+		for _, option in ipairs(options) do
+			local value = optionValue(option)
+			if isMulti and selected[value] then table.insert(list, value) end
 		end
 		return list
 	end
  
-	local function isOptionSelected(name)
-		if isMulti then return selected[name] == true end
-		return name == selected
+	local function isOptionSelected(value)
+		if isMulti then return selected[value] == true end
+		return value == selected
+	end
+
+	local function displayValue(value)
+		local option = findOption(value)
+		return option and option.Label or tostring(value or "None")
 	end
  
 	local function formatValue()
 		if isMulti then
 			local list = getSelectedList()
 			if #list == 0 then return "None" end
-			if #list == 1 then return list[1] end
+		if #list == 1 then return displayValue(list[1]) end
 			return #list .. " selected"
 		end
-		return tostring(selected or "None")
+		return displayValue(selected)
 	end
  
 	local card = BaseCard(self._page, height)
@@ -10402,7 +11027,7 @@ function Tab:AddDropdown(opts)
 	click.Parent = card
  
 	local popupOpen = false
-	local popupFrame, popupBackdrop, followConn, scrollConn
+	local popupFrame, popupBackdrop, followConn, scrollConn, searchConn
 	local optionButtons = {}
  
 	local function closePopup()
@@ -10413,6 +11038,7 @@ function Tab:AddDropdown(opts)
  
 		if followConn then followConn:Disconnect(); followConn = nil end
 		if scrollConn then scrollConn:Disconnect(); scrollConn = nil end
+		if searchConn then searchConn:Disconnect(); searchConn = nil end
 		table.clear(optionButtons)
  
 		if popupBackdrop then popupBackdrop:Destroy(); popupBackdrop = nil end
@@ -10427,10 +11053,10 @@ function Tab:AddDropdown(opts)
 		end
 	end
  
-	local function refreshOptionVisual(name)
-		local entry = optionButtons[name]
+	local function refreshOptionVisual(value)
+		local entry = optionButtons[value]
 		if not entry then return end
-		local sel = isOptionSelected(name)
+		local sel = isOptionSelected(value)
 		Tween(entry.button, { BackgroundTransparency = sel and 0.9 or 1 }, 0.1)
 		Tween(entry.label, { TextColor3 = sel and VVindUI.Theme.Text or VVindUI.Theme.TextDim }, 0.1)
 		if entry.check then
@@ -10439,6 +11065,7 @@ function Tab:AddDropdown(opts)
 		if entry.checkIcon then
 			Tween(entry.checkIcon, { ImageTransparency = sel and 0 or 1 }, 0.1)
 		end
+		if entry.singleCheck then entry.singleCheck.Visible = sel end
 	end
  
 	local function openPopup()
@@ -10451,14 +11078,17 @@ function Tab:AddDropdown(opts)
 		local mainWindow = self._window and self._window._gui or root
  
 		local rowH, padV = 30, 12
-		local contentH = #options * rowH + math.max(#options - 1, 0) * 2 + padV
+		local searchable = opts.Searchable == true or (opts.Searchable ~= false and #options >= 8)
+		local searchHeight = searchable and 36 or 0
+		local contentH = #options * rowH + math.max(#options - 1, 0) * 2 + padV + searchHeight
 		local targetHeight = math.min(contentH, 220, math.max(1, (ViewportSize().Y - 16) / GetUIScale()))
  
 		local popupW = 140
-		for _, name in ipairs(options) do
-			local w = MeasureText(tostring(name), 13, 1000)
+		for _, option in ipairs(options) do
+			local w = MeasureText(option.Label, 13, 1000)
 			popupW = math.max(popupW, w + 66)
 		end
+		if searchable then popupW = math.max(popupW, 180) end
 		popupW = math.min(popupW, ViewportSize().X / GetUIScale() - 24)
  
 		popupBackdrop = MakePopupBackdrop(closePopup)
@@ -10472,8 +11102,10 @@ function Tab:AddDropdown(opts)
 		popupFrame.ZIndex = Z.Popup
 		popupFrame.Size = UDim2.new(0, popupW, 0, 0)
 		popupFrame.Parent = root
+		popupFrame:SetAttribute("VVindInterfacePanel", true)
+		if self._window then popupFrame:SetAttribute("VVindWindowId", self._window._id) end
 		Corner(popupFrame, 10)
-		local popupStroke = Stroke(popupFrame, Color3.new(1, 1, 1), 1, 0.92)
+		local popupStroke = Stroke(popupFrame, VVindUI.Theme.Border, 1, 0.92)
 		GlassLayer(popupFrame, 10, 0.985)
  
 		local px, py = ComputePopupPosition(mainWindow, card, popupW, targetHeight)
@@ -10483,7 +11115,8 @@ function Tab:AddDropdown(opts)
 		optionsHolder.Name = "Options"
 		optionsHolder.BackgroundTransparency = 1
 		optionsHolder.BorderSizePixel = 0
-		optionsHolder.Size = UDim2.fromScale(1, 1)
+		optionsHolder.Position = UDim2.fromOffset(0, searchHeight)
+		optionsHolder.Size = UDim2.new(1, 0, 1, -searchHeight)
 		optionsHolder.ScrollingDirection = Enum.ScrollingDirection.Y
 		optionsHolder.ScrollBarThickness = 0
 		optionsHolder.AutomaticCanvasSize = Enum.AutomaticSize.Y
@@ -10507,12 +11140,49 @@ function Tab:AddDropdown(opts)
 		AddContentScrollThumb(optionsHolder, optLayout, popupFrame, {
 			Add = function(_, conn) scrollConn = conn end,
 		})
+		local searchBox
+		if searchable then
+			local searchField = Instance.new("TextBox")
+			searchField.Name = "Search"
+			searchField.ClearTextOnFocus = false
+			searchField.PlaceholderText = opts.SearchPlaceholder or "Search options..."
+			searchField.Text = ""
+			searchField.FontFace = VVindUI.Theme.FontRegular
+			searchField.TextColor3 = VVindUI.Theme.Text
+			searchField.PlaceholderColor3 = VVindUI.Theme.TextDim
+			searchField.TextSize = 13
+			searchField.TextXAlignment = Enum.TextXAlignment.Left
+			searchField.BackgroundColor3 = VVindUI.Theme.Surface
+			searchField.BackgroundTransparency = 0.2
+			searchField.BorderSizePixel = 0
+			searchField.Position = UDim2.fromOffset(6, 5)
+			searchField.Size = UDim2.new(1, -12, 0, 26)
+			searchField.ZIndex = Z.Popup + 2
+			searchField.Parent = popupFrame
+			Corner(searchField, 7)
+			searchBox = searchField
+		end
+
+		local function applySearch()
+			local query = searchBox and searchBox.Text:lower() or ""
+			for value, entry in pairs(optionButtons) do
+				local option = findOption(value)
+				local matches = query == "" or (option and (
+					option.Label:lower():find(query, 1, true) ~= nil
+					or tostring(option.Value):lower():find(query, 1, true) ~= nil
+				))
+				entry.button.Visible = matches == true
+			end
+			optionsHolder.CanvasPosition = Vector2.new(0, 0)
+		end
+		if searchBox then searchConn = searchBox:GetPropertyChangedSignal("Text"):Connect(applySearch) end
  
-		for i, optionName in ipairs(options) do
+		for i, option in ipairs(options) do
+			local optionName = option.Value
 			local optBtn = Instance.new("TextButton")
 			optBtn.Text = ""
 			optBtn.AutoButtonColor = false
-			optBtn.BackgroundColor3 = Color3.new(1, 1, 1)
+			optBtn.BackgroundColor3 = VVindUI.Theme.Surface
 			optBtn.BackgroundTransparency = isOptionSelected(optionName) and 0.9 or 1
 			optBtn.BorderSizePixel = 0
 			optBtn.Size = UDim2.new(1, 0, 0, rowH)
@@ -10524,7 +11194,7 @@ function Tab:AddDropdown(opts)
 			local optLabel = Instance.new("TextLabel")
 			optLabel.BackgroundTransparency = 1
 			optLabel.FontFace = VVindUI.Theme.FontRegular
-			optLabel.Text = tostring(optionName)
+			optLabel.Text = option.Label
 			optLabel.TextColor3 = isOptionSelected(optionName) and VVindUI.Theme.Text or VVindUI.Theme.TextDim
 			optLabel.TextSize = 13
 			optLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -10542,13 +11212,13 @@ function Tab:AddDropdown(opts)
 				check.AnchorPoint = Vector2.new(1, 0.5)
 				check.Position = UDim2.new(1, -10, 0.5, 0)
 				check.Size = UDim2.fromOffset(14, 14)
-				check.BackgroundColor3 = Color3.new(1, 1, 1)
+				check.BackgroundColor3 = VVindUI.Theme.Accent
 				check.BackgroundTransparency = isOptionSelected(optionName) and 0.05 or 0.9
 				check.BorderSizePixel = 0
 				check.ZIndex = Z.Popup + 3
 				check.Parent = optBtn
 				Corner(check, 4)
-				Stroke(check, Color3.new(1, 1, 1), 1, 0.75)
+				Stroke(check, VVindUI.Theme.Border, 1, 0.75)
  
 				local checkIcon = Instance.new("ImageLabel")
 				checkIcon.Name = "Icon"
@@ -10564,7 +11234,7 @@ function Tab:AddDropdown(opts)
  
 				entry.check = check
 				entry.checkIcon = checkIcon
-			elseif isOptionSelected(optionName) then
+			else
 				local check = Instance.new("ImageLabel")
 				check.Name = "SingleCheck"
 				check.BackgroundTransparency = 1
@@ -10574,7 +11244,9 @@ function Tab:AddDropdown(opts)
 				check.AnchorPoint = Vector2.new(1, 0.5)
 				check.Position = UDim2.new(1, -10, 0.5, 0)
 				check.ZIndex = Z.Popup + 3
+				check.Visible = isOptionSelected(optionName)
 				check.Parent = optBtn
+				entry.singleCheck = check
 			end
  
 			optionButtons[optionName] = entry
@@ -10604,10 +11276,11 @@ function Tab:AddDropdown(opts)
 				end
 			end)
 		end
+		applySearch()
  
 		Tween(popupFrame, {
 			Size = UDim2.new(0, popupW, 0, targetHeight),
-			BackgroundTransparency = 0.15,
+			BackgroundTransparency = self._window and self._window._interfaceTransparency or 0.15,
 		}, 0.44, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 		Tween(popupStroke, { Transparency = 0.85 }, 0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
  
@@ -10626,13 +11299,42 @@ function Tab:AddDropdown(opts)
 	card.MouseEnter:Connect(function() Tween(card, { BackgroundTransparency = 0.93 }, 0.15) end)
 	card.MouseLeave:Connect(function() Tween(card, { BackgroundTransparency = 0.96 }, 0.15) end)
  
+	local function cloneSelection()
+		if not isMulti then return selected end
+		local copy = {}
+		for value, enabled in pairs(selected) do if enabled then copy[value] = true end end
+		return copy
+	end
+	local function selectionEquals(first, second)
+		if type(first) ~= type(second) then return false end
+		if type(first) ~= "table" then return first == second end
+		for value, enabled in pairs(first) do if enabled ~= second[value] then return false end end
+		for value, enabled in pairs(second) do if enabled ~= first[value] then return false end end
+		return true
+	end
+	local function setOptions(newOptions)
+		local before = cloneSelection()
+		options = normalizeOptions(newOptions or {})
+		if isMulti then
+			local filtered = {}
+			for value, enabled in pairs(before) do if enabled and hasOption(value) then filtered[value] = true end end
+			selected = filtered
+		elseif not hasOption(selected) then
+			selected = hasOption(opts.Default) and opts.Default or (options[1] and optionValue(options[1]))
+		end
+		closePopup()
+		valueLabel.Text = formatValue()
+		local after = cloneSelection()
+		if not selectionEquals(before, after) then fireChanged(isMulti and getSelectedList() or selected, "code") end
+	end
+
 	return RegisterFlag(opts, {
 		Instance = card,
 		Set = function(_, v, silent)
 			if isMulti then
 				selected = {}
 				if type(v) == "table" then
-					for _, name in ipairs(v) do selected[name] = true end
+					for _, name in ipairs(v) do if hasOption(name) then selected[name] = true end end
 				end
 			else
 				selected = v
@@ -10648,24 +11350,14 @@ function Tab:AddDropdown(opts)
 			return selected
 		end,
 		SetOptions = function(_, newOptions)
-			options = newOptions or {}
-			closePopup()
-			valueLabel.Text = formatValue()
+			setOptions(newOptions)
 		end,
 		Refresh = function(_, newOptions)
-			options = newOptions or options
-			closePopup()
-			valueLabel.Text = formatValue()
+			if newOptions ~= nil then setOptions(newOptions) end
 		end,
 		OnChanged = function(_, fn) return signal.Connect(fn) end,
 		Destroy = function() closePopup(); signal.Clear(); card:Destroy() end,
 	}, "Dropdown", function(v)
-		local function hasOption(value)
-			for _, option in ipairs(options) do
-				if option == value then return true end
-			end
-			return false
-		end
 		if isMulti then
 			if type(v) ~= "table" then return false, nil, "expected a selection list" end
 			for key, value in pairs(v) do
@@ -10698,13 +11390,13 @@ function Tab:AddTextbox(opts)
 	pill.AnchorPoint = Vector2.new(1, 0.5)
 	pill.Position = UDim2.new(1, -14, 0.5, 0)
 	pill.Size = UDim2.fromOffset(pillMinW, 26)
-	pill.BackgroundColor3 = Color3.new(1, 1, 1)
+	pill.BackgroundColor3 = VVindUI.Theme.Surface
 	pill.BackgroundTransparency = 0.9
 	pill.BorderSizePixel = 0
 	pill.ZIndex = Z.Content + 2
 	pill.Parent = card
 	Corner(pill, 8)
-	local pillStroke = Stroke(pill, Color3.new(1, 1, 1), 1, 0.88)
+	local pillStroke = Stroke(pill, VVindUI.Theme.Border, 1, 0.88)
  
 	local penIcon = Instance.new("ImageLabel")
 	penIcon.BackgroundTransparency = 1
@@ -10720,7 +11412,7 @@ function Tab:AddTextbox(opts)
 	box.ClearTextOnFocus = false
 	box.FontFace = VVindUI.Theme.FontRegular
 	box.PlaceholderText = opts.Placeholder or ""
-	box.PlaceholderColor3 = Color3.fromRGB(120, 120, 122)
+	box.PlaceholderColor3 = VVindUI.Theme.TextDim
 	box.Text = opts.Default or ""
 	box.TextColor3 = VVindUI.Theme.Text
 	box.TextSize = 13
@@ -10770,12 +11462,13 @@ function Tab:AddTextbox(opts)
  
 	local signal = MakeSignal()
 	local function fireChanged(text, enterPressed)
-		if opts.Callback then task.spawn(opts.Callback, text, enterPressed) end
-		signal.Fire(text, enterPressed)
+		local info = ChangeInfo(enterPressed and "submit" or "change")
+		if opts.Callback then task.spawn(opts.Callback, text, enterPressed, info) end
+		signal.Fire(text, enterPressed, info)
 	end
  
 	box.FocusLost:Connect(function(enterPressed)
-		Tween(pillStroke, { Color = Color3.new(1, 1, 1), Transparency = 0.88 }, 0.15)
+		Tween(pillStroke, { Color = VVindUI.Theme.Border, Transparency = 0.88 }, 0.15)
 		Tween(pill, { BackgroundTransparency = 0.9 }, 0.15)
 		fireChanged(box.Text, enterPressed)
 	end)
@@ -10816,13 +11509,13 @@ local function MiniField(parent, label, width, zBase)
 	local field = Instance.new("Frame")
 	field.Position = UDim2.fromOffset(0, 12)
 	field.Size = UDim2.new(1, 0, 0, 24)
-	field.BackgroundColor3 = Color3.new(1, 1, 1)
+	field.BackgroundColor3 = VVindUI.Theme.Surface
 	field.BackgroundTransparency = 0.92
 	field.BorderSizePixel = 0
 	field.ZIndex = zBase + 2
 	field.Parent = holder
 	Corner(field, 7)
-	local fieldStroke = Stroke(field, Color3.new(1, 1, 1), 1, 0.88)
+	local fieldStroke = Stroke(field, VVindUI.Theme.Border, 1, 0.88)
  
 	local box = Instance.new("TextBox")
 	box.ClearTextOnFocus = false
@@ -10842,7 +11535,7 @@ local function MiniField(parent, label, width, zBase)
 		Tween(field, { BackgroundTransparency = 0.84 }, 0.15)
 	end)
 	box.FocusLost:Connect(function()
-		Tween(fieldStroke, { Color = Color3.new(1, 1, 1), Transparency = 0.88 }, 0.15)
+		Tween(fieldStroke, { Color = VVindUI.Theme.Border, Transparency = 0.88 }, 0.15)
 		Tween(field, { BackgroundTransparency = 0.92 }, 0.15)
 	end)
  
@@ -10867,13 +11560,13 @@ function Tab:AddColorPicker(opts)
 	swatchHolder.AnchorPoint = Vector2.new(1, 0.5)
 	swatchHolder.Position = UDim2.new(1, -14, 0.5, 0)
 	swatchHolder.Size = UDim2.fromOffset(24, 24)
-	swatchHolder.BackgroundColor3 = Color3.new(1, 1, 1)
+	swatchHolder.BackgroundColor3 = VVindUI.Theme.Surface
 	swatchHolder.BackgroundTransparency = 0.9
 	swatchHolder.BorderSizePixel = 0
 	swatchHolder.ZIndex = Z.Content + 1
 	swatchHolder.Parent = card
 	Corner(swatchHolder, 6)
-	local swatchStroke = Stroke(swatchHolder, Color3.new(1, 1, 1), 1, 0.85)
+	local swatchStroke = Stroke(swatchHolder, VVindUI.Theme.Border, 1, 0.85)
  
 	local swatch = Instance.new("Frame")
 	swatch.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -10883,6 +11576,7 @@ function Tab:AddColorPicker(opts)
 	swatch.BorderSizePixel = 0
 	swatch.ZIndex = Z.Content + 2
 	swatch.Parent = swatchHolder
+	swatch:SetAttribute("VVindThemeExempt", true)
 	Corner(swatch, 4)
  
 	local click = Instance.new("TextButton")
@@ -10941,8 +11635,9 @@ function Tab:AddColorPicker(opts)
 		if fireCallback then
 			if not ColorsClose(c, lastFired) then
 				lastFired = c
-				if opts.Callback then task.spawn(opts.Callback, c) end
-				signal.Fire(c)
+				local info = ChangeInfo()
+				if opts.Callback then task.spawn(opts.Callback, c, info) end
+				signal.Fire(c, info)
 			end
 		end
 	end
@@ -10953,7 +11648,7 @@ function Tab:AddColorPicker(opts)
 		draggingSV, draggingHue = false, false
 		colorInput = nil
 		RegisterPopupClose(closePopup)
-		Tween(swatchStroke, { Color = Color3.new(1, 1, 1), Transparency = 0.85 }, 0.15)
+		Tween(swatchStroke, { Color = VVindUI.Theme.Border, Transparency = 0.85 }, 0.15)
  
 		if followConn then followConn:Disconnect(); followConn = nil end
 		if popupBackdrop then popupBackdrop:Destroy(); popupBackdrop = nil end
@@ -11044,8 +11739,10 @@ function Tab:AddColorPicker(opts)
 		popupFrame.ZIndex = Z.Popup
 		popupFrame.Size = UDim2.new(0, popupW, 0, 0)
 		popupFrame.Parent = root
+		popupFrame:SetAttribute("VVindInterfacePanel", true)
+		if self._window then popupFrame:SetAttribute("VVindWindowId", self._window._id) end
 		Corner(popupFrame, 10)
-		local popupStroke = Stroke(popupFrame, Color3.new(1, 1, 1), 1, 0.92)
+		local popupStroke = Stroke(popupFrame, VVindUI.Theme.Border, 1, 0.92)
 		GlassLayer(popupFrame, 10, 0.985)
  
 		local px, py = ComputePopupPosition(mainWindow, card, popupW, popupH)
@@ -11061,6 +11758,8 @@ function Tab:AddColorPicker(opts)
 		local innerW = popupW - 28
  
 		svBox = Instance.new("Frame")
+		svBox.Name = "ColorSpectrum"
+		svBox:SetAttribute("VVindThemeExempt", true)
 		svBox.Active = true
 		svBox.Position = UDim2.fromOffset(0, 0)
 		svBox.Size = UDim2.fromOffset(innerW, 104)
@@ -11072,6 +11771,8 @@ function Tab:AddColorPicker(opts)
 		Corner(svBox, 8)
  
 		satGradient = Instance.new("UIGradient")
+		satGradient.Name = "ColorSpectrumGradient"
+		satGradient:SetAttribute("VVindThemeExempt", true)
 		satGradient.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromHSV(hue, 1, 1))
 		satGradient.Parent = svBox
  
@@ -11116,9 +11817,11 @@ function Tab:AddColorPicker(opts)
 		svCursorInner.ZIndex = Z.Popup + 4
 		svCursorInner.Parent = svCursor
 		Corner(svCursorInner, 6)
-		Stroke(svCursorInner, Color3.new(1, 1, 1), 2, 0)
+		Stroke(svCursorInner, VVindUI.Theme.Border, 2, 0)
  
 		hueBar = Instance.new("Frame")
+		hueBar.Name = "HueSpectrum"
+		hueBar:SetAttribute("VVindThemeExempt", true)
 		hueBar.Active = true
 		hueBar.Position = UDim2.fromOffset(0, 114)
 		hueBar.Size = UDim2.fromOffset(innerW, 10)
@@ -11151,6 +11854,8 @@ function Tab:AddColorPicker(opts)
 		hueCursorLayer.Parent = popupFrame
  
 		hueCursor = Instance.new("Frame")
+		hueCursor.Name = "HueCursor"
+		hueCursor:SetAttribute("VVindThemeExempt", true)
 		hueCursor.AnchorPoint = Vector2.new(0.5, 0.5)
 		hueCursor.Position = UDim2.new(hue, 0, 0.5, 0)
 		hueCursor.Size = UDim2.fromOffset(6, 10)
@@ -11206,13 +11911,13 @@ function Tab:AddColorPicker(opts)
 				btn.BackgroundTransparency = 0
 				btn.TextColor3 = VVindUI.Theme.Background
 			else
-				btn.BackgroundColor3 = Color3.new(1, 1, 1)
+				btn.BackgroundColor3 = VVindUI.Theme.Surface
 				btn.BackgroundTransparency = 0.92
 				btn.TextColor3 = VVindUI.Theme.Text
 			end
 			btn.Parent = btnRow
 			Corner(btn, 8)
-			if not filled then Stroke(btn, Color3.new(1, 1, 1), 1, 0.88) end
+			if not filled then Stroke(btn, VVindUI.Theme.Border, 1, 0.88) end
 			return btn
 		end
  
@@ -11292,7 +11997,7 @@ function Tab:AddColorPicker(opts)
  
 		Tween(popupFrame, {
 			Size = UDim2.new(0, popupW, 0, popupH),
-			BackgroundTransparency = 0.15,
+			BackgroundTransparency = self._window and self._window._interfaceTransparency or 0.15,
 		}, 0.44, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 		Tween(popupStroke, { Transparency = 0.85 }, 0.4, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
  
@@ -11326,133 +12031,549 @@ end
  
 function Tab:AddKeybind(opts)
 	opts = opts or {}
+	local modeOrder = { "Press", "Toggle", "Hold", "Always" }
+	local modeNames = { Press = "PRS", Toggle = "TGL", Hold = "HLD", Always = "ALW" }
+	local mode = opts.Mode or (opts.ToggleFlag and "Toggle" or "Press")
+	assert(table.find(modeOrder, mode), "Keybind Mode must be Press, Toggle, Hold, or Always")
+	local currentKey, keyErr = ResolveKeybindKey(opts.Default)
+	assert(not keyErr, "Keybind Default " .. tostring(keyErr))
+	local context = opts.Context or "global"
+	assert(type(context) == "string" and context:gsub("%s", "") ~= "", "Keybind Context must be a non-empty string")
+	local defaultKey, defaultMode, defaultContext = currentKey, mode, context
 	local hasDesc = opts.Description and opts.Description ~= ""
 	local height = hasDesc and 56 or 44
 	local jan = self._janitor
- 
+
 	local card = BaseCard(self._page, height)
 	local textX = AddLeadingIcon(card, opts.Icon, height)
 	AddTitleDesc(card, textX, 128, opts.Text or "Keybind", opts.Description, height)
 	self._window:_RegisterSearchable(self, opts.Text or "Keybind", card)
- 
-	local currentKey = opts.Default
- 
+
 	local pill = Instance.new("Frame")
 	pill.AnchorPoint = Vector2.new(1, 0.5)
 	pill.Position = UDim2.new(1, -14, 0.5, 0)
-	pill.Size = UDim2.fromOffset(104, 26)
-	pill.BackgroundColor3 = Color3.new(1, 1, 1)
+	pill.Size = UDim2.fromOffset(138, 28)
+	pill.BackgroundColor3 = VVindUI.Theme.Surface
 	pill.BackgroundTransparency = 0.9
 	pill.BorderSizePixel = 0
 	pill.ZIndex = Z.Content + 2
 	pill.Parent = card
 	Corner(pill, 8)
-	local pillStroke = Stroke(pill, Color3.new(1, 1, 1), 1, 0.88)
- 
+	local pillStroke = Stroke(pill, VVindUI.Theme.Border, 1, 0.88)
+
 	local keyIcon = Instance.new("ImageLabel")
 	keyIcon.BackgroundTransparency = 1
 	keyIcon.Image = ResolveIcon("keyboard")
 	keyIcon.ImageColor3 = VVindUI.Theme.TextDim
 	keyIcon.Size = UDim2.fromOffset(13, 13)
 	keyIcon.AnchorPoint = Vector2.new(0, 0.5)
-	keyIcon.Position = UDim2.new(0, 10, 0.5, 0)
+	keyIcon.Position = UDim2.new(0, 9, 0.5, 0)
 	keyIcon.ZIndex = Z.Content + 3
 	keyIcon.Parent = pill
- 
+
 	local keyLabel = Instance.new("TextLabel")
 	keyLabel.BackgroundTransparency = 1
 	keyLabel.FontFace = VVindUI.Theme.FontRegular
-	keyLabel.Text = currentKey and currentKey.Name or "None"
+	keyLabel.Text = KeybindLabel(currentKey)
 	keyLabel.TextColor3 = VVindUI.Theme.Text
 	keyLabel.TextSize = 13
 	keyLabel.TextTruncate = Enum.TextTruncate.AtEnd
 	keyLabel.TextXAlignment = Enum.TextXAlignment.Left
-	keyLabel.Position = UDim2.fromOffset(29, 0)
-	keyLabel.Size = UDim2.new(1, -37, 1, 0)
+	keyLabel.Position = UDim2.fromOffset(28, 0)
+	keyLabel.Size = UDim2.new(1, -82, 1, 0)
 	keyLabel.ZIndex = Z.Content + 3
 	keyLabel.Parent = pill
- 
-	local click = Instance.new("TextButton")
-	click.Text = ""
-	click.AutoButtonColor = false
-	click.BackgroundTransparency = 1
-	click.Size = UDim2.fromScale(1, 1)
-	click.ZIndex = Z.Content + 4
-	click.Parent = pill
- 
-	local listening = false
-	local listenConn = nil
-	local signal = MakeSignal()
- 
-	local function fireChanged(key)
-		signal.Fire(key)
+
+	local keyButton = Instance.new("TextButton")
+	keyButton.Name = "KeyCapture"
+	keyButton.Text = ""
+	keyButton.AutoButtonColor = false
+	keyButton.BackgroundTransparency = 1
+	keyButton.Size = UDim2.new(1, -48, 1, 0)
+	keyButton.ZIndex = Z.Content + 4
+	keyButton.Parent = pill
+
+	local modeButton = Instance.new("TextButton")
+	modeButton.Name = "ModeSelector"
+	modeButton.AutoButtonColor = false
+	modeButton.BackgroundColor3 = VVindUI.Theme.Surface
+	modeButton.BackgroundTransparency = 0.58
+	modeButton.BorderSizePixel = 0
+	modeButton.Position = UDim2.new(1, -43, 0, 4)
+	modeButton.Size = UDim2.new(0, 39, 1, -8)
+	modeButton.Text = modeNames[mode]
+	modeButton.TextColor3 = VVindUI.Theme.TextDim
+	modeButton.TextSize = 10
+	modeButton.FontFace = VVindUI.Theme.FontSemibold
+	modeButton.ZIndex = Z.Content + 4
+	modeButton.Parent = pill
+	Corner(modeButton, 5)
+
+	local listening, holdActive, toggleActive = false, false, false
+	local warnedMissingToggle = false
+	local listenConn, modePopup, modeBackdrop = nil, nil, nil
+	local signal, pressedSignal, stateSignal = MakeSignal(), MakeSignal(), MakeSignal()
+	local modeSignal, contextSignal = MakeSignal(), MakeSignal()
+	local api
+	local control = {
+		key = currentKey,
+		mode = mode,
+		context = context,
+		stroke = pillStroke,
+		listening = false,
+		destroyed = false,
+		label = opts.Text or "Keybind",
+	}
+
+	local function updateKeyVisual()
+		keyLabel.Text = listening and "..." or KeybindLabel(currentKey)
+		modeButton.Text = modeNames[mode]
 	end
- 
+
+	local function setToggleFlag(value, silent)
+		if not opts.ToggleFlag then return false end
+		local toggle = VVindUI.Flags[opts.ToggleFlag]
+		if not toggle or toggle.Kind ~= "Toggle" then
+			if not warnedMissingToggle then
+				warnedMissingToggle = true
+				warn("[VindUI] Keybind ToggleFlag is not a registered Toggle: " .. tostring(opts.ToggleFlag))
+			end
+			return false
+		end
+		local previousSource = VVindUI._ChangeSource
+		if previousSource == nil then VVindUI._ChangeSource = silent and "code" or "user" end
+		local ok, err = pcall(toggle.Set, toggle, value == true, silent == true)
+		VVindUI._ChangeSource = previousSource
+		if not ok then warn("[VindUI] Keybind could not update ToggleFlag: " .. tostring(err)) end
+		return ok
+	end
+
+	local function getActive()
+		if mode == "Always" then return true end
+		if mode == "Hold" then return holdActive end
+		if mode == "Toggle" then
+			if opts.ToggleFlag then
+				local toggle = VVindUI.Flags[opts.ToggleFlag]
+				if toggle and toggle.Kind == "Toggle" then
+					local ok, value = pcall(toggle.Get, toggle)
+					if ok then return value == true end
+				end
+			end
+			return toggleActive
+		end
+		return false
+	end
+
+	local function runWithCodeSource(callback)
+		local previousSource = VVindUI._ChangeSource
+		if previousSource == nil then VVindUI._ChangeSource = "code" end
+		local result = table.pack(pcall(callback))
+		VVindUI._ChangeSource = previousSource
+		if not result[1] then error(result[2], 3) end
+		return table.unpack(result, 2, result.n)
+	end
+
+	local function fireChanged(key, source)
+		local info = ChangeInfo("bind")
+		info.Key = key
+		if source then info.Source = source end
+		if opts.Callback then task.spawn(opts.Callback, key, "bind", info) end
+		signal.Fire(key, info)
+		stateSignal.Fire(api, info)
+	end
+
+	local function fireStateChanged(action)
+		local info = ChangeInfo(action)
+		info.Mode, info.Context, info.State = mode, context, getActive()
+		stateSignal.Fire(api, info)
+	end
+
+	local function firePress(action, state)
+		local info = ChangeInfo(action)
+		info.State, info.Mode, info.Context = state, mode, context
+		if opts.Callback then task.spawn(opts.Callback, currentKey, action, info) end
+		pressedSignal.Fire(currentKey, info)
+	end
+
+	local function releaseHold(silent)
+		if not holdActive then return end
+		holdActive = false
+		control.holdActive = false
+		if opts.ToggleFlag then setToggleFlag(false, silent) end
+		if not silent then
+			firePress("release", false)
+			fireStateChanged("active")
+		end
+	end
+	control.releaseHold = releaseHold
+
+	local function applyMode(nextMode, silent, source)
+		assert(table.find(modeOrder, nextMode), "Keybind Mode must be Press, Toggle, Hold, or Always")
+		if mode == nextMode then return false end
+		local previous = mode
+		if previous == "Hold" then releaseHold(silent) end
+		mode = nextMode
+		control.mode = mode
+		if api then api.Mode = mode end
+		if mode == "Always" then
+			if opts.ToggleFlag then setToggleFlag(true, silent) else toggleActive = true end
+		elseif previous == "Always" and mode ~= "Toggle" then
+			if opts.ToggleFlag then setToggleFlag(false, silent) else toggleActive = false end
+		end
+		updateKeyVisual()
+		if not silent then
+			local info = ChangeInfo("mode")
+			info.Previous, info.Mode = previous, mode
+			if source then info.Source = source end
+			modeSignal.Fire(mode, info)
+			stateSignal.Fire(api, info)
+		end
+		RefreshKeybindConflicts()
+		return true
+	end
+
+	local function applyContext(nextContext, silent, source)
+		assert(type(nextContext) == "string" and nextContext:gsub("%s", "") ~= "", "Keybind Context must be a non-empty string")
+		if context == nextContext then return false end
+		local previous = context
+		context = nextContext
+		control.context = context
+		if api then api.Context = context end
+		if holdActive and not KeybindContextActive(context) then releaseHold(silent) end
+		if not silent then
+			local info = ChangeInfo("context")
+			info.Previous, info.Context = previous, context
+			if source then info.Source = source end
+			contextSignal.Fire(context, info)
+			stateSignal.Fire(api, info)
+		end
+		RefreshKeybindConflicts()
+		return true
+	end
+
+	local function setKey(nextKey, silent)
+		if currentKey == nextKey then return false end
+		releaseHold(silent)
+		currentKey = nextKey
+		control.key = currentKey
+		updateKeyVisual()
+		RefreshKeybindConflicts()
+		if not silent then fireChanged(currentKey) end
+		return true
+	end
+
+	local function pressKey()
+		if mode == "Hold" then
+			if holdActive then return end
+			holdActive = true
+			control.holdActive = true
+			if opts.ToggleFlag then setToggleFlag(true) end
+			firePress("press", true)
+			fireStateChanged("active")
+		elseif mode == "Toggle" then
+			local active = not getActive()
+			if opts.ToggleFlag then setToggleFlag(active) else toggleActive = active end
+			firePress("press", active)
+			fireStateChanged("active")
+		elseif mode == "Press" then
+			firePress("press", nil)
+		end
+	end
+	control.pressKey = pressKey
+
 	local function stopListening()
+		if not listening then return end
 		listening = false
+		control.listening = false
+		if KeybindCaptureStop == stopListening then KeybindCaptureStop = nil end
 		KeybindCapturing = false
 		if listenConn then listenConn:Disconnect(); listenConn = nil end
-		Tween(pillStroke, { Color = Color3.new(1, 1, 1), Transparency = 0.88 }, 0.15)
+		Tween(pillStroke, { Color = VVindUI.Theme.Border, Transparency = 0.88 }, 0.15)
 		Tween(pill, { BackgroundTransparency = 0.9 }, 0.15)
-		keyLabel.Text = currentKey and currentKey.Name or "None"
+		updateKeyVisual()
+		RefreshKeybindConflicts()
 	end
- 
+
 	local function startListening()
 		if listening then return end
+		if KeybindCaptureStop then KeybindCaptureStop() end
+		releaseHold()
 		listening = true
+		control.listening = true
 		KeybindCapturing = true
-		keyLabel.Text = "..."
+		KeybindCaptureStop = stopListening
+		updateKeyVisual()
 		Tween(pillStroke, { Color = VVindUI.Theme.Accent, Transparency = 0.3 }, 0.15)
 		Tween(pill, { BackgroundTransparency = 0.82 }, 0.15)
- 
+		RefreshKeybindConflicts()
+
 		listenConn = UserInputService.InputBegan:Connect(function(input)
-			if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
- 
 			if input.KeyCode == Enum.KeyCode.Escape then
 				stopListening()
 				return
 			end
-			if input.KeyCode == Enum.KeyCode.Backspace or input.KeyCode == Enum.KeyCode.Delete then
-				currentKey = nil
+			if input.UserInputType == Enum.UserInputType.Keyboard
+				and (input.KeyCode == Enum.KeyCode.Backspace or input.KeyCode == Enum.KeyCode.Delete) then
+				setKey(nil)
 				stopListening()
-				fireChanged(nil)
 				return
 			end
- 
-			currentKey = input.KeyCode
+			local pressed = KeybindInputKey(input)
+			if not pressed then return end
+			setKey(pressed)
 			stopListening()
-			if opts.Callback then task.spawn(opts.Callback, currentKey, "bind") end
-			fireChanged(currentKey)
 		end)
 		jan:Add(listenConn)
 	end
- 
-	click.MouseButton1Click:Connect(startListening)
- 
-	jan:Add(UserInputService.InputBegan:Connect(function(input, gameProcessed)
-		if listening or KeybindCapturing or gameProcessed then return end
-		if UserInputService:GetFocusedTextBox() then return end
-		if currentKey
-			and input.UserInputType == Enum.UserInputType.Keyboard
-			and input.KeyCode == currentKey then
-			if opts.Callback then task.spawn(opts.Callback, currentKey, "press") end
+
+	local function closeModePopup()
+		RegisterPopupClose(closeModePopup)
+		if modeBackdrop then modeBackdrop:Destroy(); modeBackdrop = nil end
+		if modePopup then modePopup:Destroy(); modePopup = nil end
+	end
+
+	local function openModePopup()
+		if modePopup then closeModePopup(); return end
+		CloseAnyOpenPopup()
+		RegisterPopupOpen(closeModePopup)
+		modeBackdrop = MakePopupBackdrop(closeModePopup)
+		local root, scale = VVindUI._Root, GetUIScale()
+		local view = ViewportSize()
+		local popupW, rowH, pad = 142, 30, 6
+		local popupH = pad * 2 + #modeOrder * rowH
+		local anchorPos, anchorSize = modeButton.AbsolutePosition, modeButton.AbsoluteSize
+		local px = (anchorPos.X + anchorSize.X) / scale - popupW
+		local py = (anchorPos.Y + anchorSize.Y) / scale + 5
+		px = SafeClamp(px, 8, view.X / scale - popupW - 8)
+		py = SafeClamp(py, 8, view.Y / scale - popupH - 8)
+		modePopup = Instance.new("Frame")
+		modePopup.Name = "KeybindModePopup"
+		modePopup.Active = true
+		modePopup.BackgroundColor3 = VVindUI.Theme.Background
+		modePopup.BackgroundTransparency = 0.04
+		modePopup.BorderSizePixel = 0
+		modePopup.Position = UDim2.fromOffset(math.round(px), math.round(py))
+		modePopup.Size = UDim2.fromOffset(popupW, popupH)
+		modePopup.ZIndex = Z.Popup
+		modePopup.Parent = root
+		modePopup:SetAttribute("VVindInterfacePanel", true)
+		if self._window then modePopup:SetAttribute("VVindWindowId", self._window._id) end
+		Corner(modePopup, 9)
+		Stroke(modePopup, VVindUI.Theme.Border, 1, 0.9)
+
+		for index, option in ipairs(modeOrder) do
+			local button = Instance.new("TextButton")
+			button.Name = option
+			button.AutoButtonColor = false
+			button.BackgroundColor3 = VVindUI.Theme.Surface
+			button.BackgroundTransparency = option == mode and 0.78 or 1
+			button.BorderSizePixel = 0
+			button.Position = UDim2.fromOffset(pad, pad + (index - 1) * rowH)
+			button.Size = UDim2.new(1, -pad * 2, 0, rowH - 2)
+			button.Text = ""
+			button.ZIndex = Z.Popup + 1
+			button.Parent = modePopup
+			Corner(button, 6)
+			local label = Instance.new("TextLabel")
+			label.BackgroundTransparency = 1
+			label.FontFace = VVindUI.Theme.FontRegular
+			label.Text = option
+			label.TextColor3 = option == mode and VVindUI.Theme.Text or VVindUI.Theme.TextDim
+			label.TextSize = 12
+			label.TextXAlignment = Enum.TextXAlignment.Left
+			label.Position = UDim2.fromOffset(9, 0)
+			label.Size = UDim2.new(1, -18, 1, 0)
+			label.ZIndex = Z.Popup + 2
+			label.Parent = button
+			button.MouseEnter:Connect(function()
+				if modePopup then Tween(button, { BackgroundTransparency = 0.78 }, 0.1) end
+			end)
+			button.MouseLeave:Connect(function()
+				if modePopup then Tween(button, { BackgroundTransparency = option == mode and 0.78 or 1 }, 0.1) end
+			end)
+			button.MouseButton1Click:Connect(function()
+				applyMode(option, false, "user")
+				closeModePopup()
+			end)
 		end
-	end))
- 
+	end
+
+	keyButton.MouseButton1Click:Connect(startListening)
+	keyButton.MouseButton2Click:Connect(openModePopup)
+	modeButton.MouseButton1Click:Connect(openModePopup)
 	card.MouseEnter:Connect(function() Tween(card, { BackgroundTransparency = 0.93 }, 0.15) end)
 	card.MouseLeave:Connect(function() Tween(card, { BackgroundTransparency = 0.96 }, 0.15) end)
- 
-	return RegisterFlag(opts, {
+
+	api = {
 		Instance = card,
-		Set = function(_, key, silent)
-			currentKey = key
-			keyLabel.Text = key and key.Name or "None"
-			if not silent then fireChanged(key) end
+		Kind = "Keybind",
+		Mode = mode,
+		Context = context,
+		ToggleFlag = opts.ToggleFlag,
+		Set = function(_, value, silent)
+			return runWithCodeSource(function()
+				local nextKey, nextMode, nextContext, nextActive
+				local activeSpecified = false
+				if type(value) == "table" then
+					local rawKey = value.key
+					if rawKey == nil then rawKey = value.Key end
+					if rawKey ~= nil then
+						local key, err = ResolveKeybindKey(rawKey)
+						assert(not err, "Keybind value " .. tostring(err))
+						nextKey = key
+					end
+					nextMode = value.mode or value.Mode
+					nextContext = value.context or value.Context
+					nextActive = value.active
+					if nextActive == nil then nextActive = value.Active end
+					activeSpecified = nextActive ~= nil
+					if nextMode ~= nil then assert(table.find(modeOrder, nextMode), "Keybind Mode must be Press, Toggle, Hold, or Always") end
+					if nextContext ~= nil then assert(type(nextContext) == "string" and nextContext:gsub("%s", "") ~= "", "Keybind Context must be a non-empty string") end
+					if activeSpecified then assert(type(nextActive) == "boolean", "Keybind active state must be a boolean") end
+				else
+					local key, err = ResolveKeybindKey(value)
+					assert(not err, "Keybind value " .. tostring(err))
+					nextKey = key
+				end
+				if nextMode then applyMode(nextMode, silent == true) end
+				if nextContext then applyContext(nextContext, silent == true) end
+				if nextKey ~= nil or value == nil or (type(value) == "table" and (value.key ~= nil or value.Key ~= nil)) then
+					setKey(nextKey, silent == true)
+				end
+				if activeSpecified then
+					if mode == "Toggle" then
+						if opts.ToggleFlag then setToggleFlag(nextActive, silent == true) else toggleActive = nextActive end
+					elseif mode == "Always" then
+						if opts.ToggleFlag then setToggleFlag(true, silent == true) else toggleActive = true end
+					end
+				elseif mode == "Always" and opts.ToggleFlag then
+					setToggleFlag(true, silent == true)
+				end
+				if activeSpecified and mode == "Hold" then releaseHold(silent == true) end
+				if activeSpecified and not silent then fireStateChanged("active") end
+			end)
 		end,
 		Get = function() return currentKey end,
+		GetState = function()
+			return { key = currentKey or "NONE", mode = mode, context = context, active = getActive() }
+		end,
+		GetActive = getActive,
+		GetMode = function() return mode end,
+		GetContext = function() return context end,
+		SetMode = function(_, value, silent)
+			return runWithCodeSource(function() return applyMode(value, silent == true) end)
+		end,
+		SetContext = function(_, value, silent)
+			return runWithCodeSource(function() return applyContext(value, silent == true) end)
+		end,
+		SetActive = function(_, value, silent)
+			return runWithCodeSource(function()
+				assert(type(value) == "boolean", "Keybind active state must be a boolean")
+				if mode == "Toggle" then
+					if opts.ToggleFlag then setToggleFlag(value, silent == true) else toggleActive = value end
+				elseif mode == "Always" then
+					if not value then return false, "Always mode cannot be deactivated" end
+					if opts.ToggleFlag then setToggleFlag(true, silent == true) else toggleActive = true end
+				else
+					return false, "active state can only be set in Toggle or Always mode"
+				end
+				if not silent then fireStateChanged("active") end
+				return true
+			end)
+		end,
+		Rebind = function(_, key) return api:Set(key) end,
+		Unbind = function() return api:Set(nil) end,
+		Reset = function()
+			return api:Set({
+				key = defaultKey or "NONE",
+				mode = defaultMode,
+				context = defaultContext,
+			})
+		end,
+		GetConflicts = function()
+			local conflicts = {}
+			for _, other in ipairs(KeybindControls) do
+				if KeybindConflicts(control, other) then table.insert(conflicts, other.api or other) end
+			end
+			return conflicts
+		end,
 		OnChanged = function(_, fn) return signal.Connect(fn) end,
-		Destroy = function() stopListening(); signal.Clear(); card:Destroy() end,
-	}, "Keybind")
+		OnStateChanged = function(_, fn) return stateSignal.Connect(fn) end,
+		OnPressed = function(_, fn) return pressedSignal.Connect(fn) end,
+		OnModeChanged = function(_, fn) return modeSignal.Connect(fn) end,
+		OnContextChanged = function(_, fn) return contextSignal.Connect(fn) end,
+		Destroy = function()
+			if control.destroyed then return end
+			control.destroyed = true
+			releaseHold(true)
+			stopListening()
+			closeModePopup()
+			local index = table.find(KeybindControls, control)
+			if index then table.remove(KeybindControls, index) end
+			signal.Clear()
+			pressedSignal.Clear()
+			stateSignal.Clear()
+			modeSignal.Clear()
+			contextSignal.Clear()
+			card:Destroy()
+			RefreshKeybindConflicts()
+		end,
+	}
+	control.api = api
+	api = RegisterFlag(opts, api, "Keybind")
+	table.insert(KeybindControls, control)
+	RefreshKeybindConflicts()
+
+	if not KeybindInputHandlersInstalled then
+		KeybindInputHandlersInstalled = true
+		LibJanitor:Add(UserInputService.InputBegan:Connect(function(input, gameProcessed)
+			if KeybindCapturing or gameProcessed or UserInputService:GetFocusedTextBox() then return end
+			local pressed = KeybindInputKey(input)
+			if not pressed then return end
+			local matches = {}
+			for _, item in ipairs(KeybindControls) do
+				if not item.destroyed and not item.listening and item.mode ~= "Always"
+					and item.key == pressed and KeybindContextActive(item.context) then
+					table.insert(matches, item)
+				end
+			end
+			if #matches == 1 then matches[1].pressKey() end
+		end))
+		LibJanitor:Add(UserInputService.InputEnded:Connect(function(input)
+			local released = KeybindInputKey(input)
+			if not released then return end
+			for _, item in ipairs(KeybindControls) do
+				if not item.destroyed and item.holdActive and item.key == released then item.releaseHold() end
+			end
+		end))
+		LibJanitor:Add(UserInputService.WindowFocusReleased:Connect(function()
+			if KeybindCaptureStop then KeybindCaptureStop() end
+			for _, item in ipairs(KeybindControls) do
+				if item.holdActive then item.releaseHold() end
+			end
+		end))
+	end
+	if mode == "Always" and opts.ToggleFlag then setToggleFlag(true, true) end
+
+	jan:Add(function()
+		if api and not control.destroyed then api:Destroy() end
+	end)
+	return api
+end
+
+function VVindUI:SetKeybindContext(context)
+	assert(type(context) == "string" and context:gsub("%s", "") ~= "", "Keybind context must be a non-empty string")
+	if ActiveKeybindContext == context then return true end
+	ActiveKeybindContext = context
+	for _, control in ipairs(KeybindControls) do
+		if control.holdActive and not KeybindContextActive(control.context) then control.releaseHold() end
+	end
+	RefreshKeybindConflicts()
+	return true
+end
+
+function VVindUI:GetKeybindContext()
+	return ActiveKeybindContext
 end
  
 local ConsoleColors = {
@@ -11478,7 +12599,7 @@ function Tab:AddConsole(opts)
 	container.ZIndex = Z.Content
 	container.Parent = self._page
 	Corner(container, VVindUI.Theme.CornerRadiusSm)
-	Stroke(container, Color3.new(1, 1, 1), 1, 0.92)
+	Stroke(container, VVindUI.Theme.Border, 1, 0.92)
  
 	local header = Instance.new("Frame")
 	header.Name = "Header"
@@ -11546,7 +12667,7 @@ function Tab:AddConsole(opts)
 		local btn = Instance.new("TextButton")
 		btn.Text = ""
 		btn.AutoButtonColor = false
-		btn.BackgroundColor3 = Color3.new(1, 1, 1)
+		btn.BackgroundColor3 = VVindUI.Theme.Surface
 		btn.BackgroundTransparency = 1
 		btn.BorderSizePixel = 0
 		btn.Size = UDim2.fromOffset(24, 24)
@@ -11581,7 +12702,7 @@ function Tab:AddConsole(opts)
 	local clearBtn = iconButton("trash-2", 2)
  
 	local divider = Instance.new("Frame")
-	divider.BackgroundColor3 = Color3.new(1, 1, 1)
+	divider.BackgroundColor3 = VVindUI.Theme.Surface
 	divider.BackgroundTransparency = 0.92
 	divider.BorderSizePixel = 0
 	divider.Size = UDim2.new(1, 0, 0, 1)
@@ -11815,7 +12936,7 @@ function Tab:AddTable(opts)
 	container.ZIndex = Z.Content
 	container.Parent = self._page
 	Corner(container, VVindUI.Theme.CornerRadiusSm)
-	Stroke(container, Color3.new(1, 1, 1), 1, 0.92)
+	Stroke(container, VVindUI.Theme.Border, 1, 0.92)
 	self._window:_RegisterSearchable(self, title, container)
  
 	local titleLabel = Instance.new("TextLabel")
@@ -11897,7 +13018,7 @@ function Tab:AddTable(opts)
 	end
  
 	local divider = Instance.new("Frame")
-	divider.BackgroundColor3 = Color3.new(1, 1, 1)
+	divider.BackgroundColor3 = VVindUI.Theme.Surface
 	divider.BackgroundTransparency = 0.92
 	divider.BorderSizePixel = 0
 	divider.Position = UDim2.fromOffset(0, colHeadY + COLHEAD_H)
@@ -11956,7 +13077,7 @@ function Tab:AddTable(opts)
 		for ri, row in ipairs(currentRows) do
 			local rowFrame = Instance.new("Frame")
 			rowFrame.Name = "Row" .. ri
-			rowFrame.BackgroundColor3 = Color3.new(1, 1, 1)
+			rowFrame.BackgroundColor3 = VVindUI.Theme.Surface
 			rowFrame.BackgroundTransparency = (striped and ri % 2 == 0) and 0.97 or 1
 			rowFrame.BorderSizePixel = 0
 			rowFrame.LayoutOrder = ri
@@ -12100,14 +13221,16 @@ function Tab:AddCardGrid(opts)
  
 	local outer = Instance.new("Frame")
 	outer.Name = "CardGrid"
-	outer.BackgroundColor3 = Color3.new(1, 1, 1)
+	outer.BackgroundColor3 = VVindUI.Theme.Surface
 	outer.BackgroundTransparency = 0.97
 	outer.BorderSizePixel = 0
 	outer.Size = UDim2.new(1, 0, 0, height)
 	outer.ZIndex = Z.Content
 	outer.Parent = self._page
+	outer:SetAttribute("VVindInterfacePanel", true)
+	if self._window then outer:SetAttribute("VVindWindowId", self._window._id) end
 	Corner(outer, VVindUI.Theme.CornerRadiusSm)
-	Stroke(outer, Color3.new(1, 1, 1), 1, 0.95)
+	Stroke(outer, VVindUI.Theme.Border, 1, 0.95)
 	self._window:_RegisterSearchable(self, opts.Title or "Cards", outer)
  
 	local content = Instance.new("Frame")
@@ -12137,14 +13260,14 @@ function Tab:AddCardGrid(opts)
 	local searchBox
 	if showSearch then
 		local searchPill = Instance.new("Frame")
-		searchPill.BackgroundColor3 = Color3.new(1, 1, 1)
+		searchPill.BackgroundColor3 = VVindUI.Theme.Surface
 		searchPill.BackgroundTransparency = 0.92
 		searchPill.BorderSizePixel = 0
 		searchPill.Size = UDim2.new(1, 0, 0, TOP_H)
 		searchPill.ZIndex = Z.Content + 1
 		searchPill.Parent = content
 		Corner(searchPill, 9)
-		local searchStroke = Stroke(searchPill, Color3.new(1, 1, 1), 1, 0.88)
+		local searchStroke = Stroke(searchPill, VVindUI.Theme.Border, 1, 0.88)
  
 		local searchIcon = Instance.new("ImageLabel")
 		searchIcon.BackgroundTransparency = 1
@@ -12160,7 +13283,7 @@ function Tab:AddCardGrid(opts)
 		searchBox.ClearTextOnFocus = false
 		searchBox.FontFace = VVindUI.Theme.FontRegular
 		searchBox.PlaceholderText = opts.SearchPlaceholder or "Search by name / tags..."
-		searchBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 122)
+		searchBox.PlaceholderColor3 = VVindUI.Theme.TextDim
 		searchBox.Text = ""
 		searchBox.TextColor3 = VVindUI.Theme.Text
 		searchBox.TextSize = 13
@@ -12177,7 +13300,7 @@ function Tab:AddCardGrid(opts)
 			Tween(searchStroke, { Color = VVindUI.Theme.Accent, Transparency = 0.3 }, 0.15)
 		end)
 		searchBox.FocusLost:Connect(function()
-			Tween(searchStroke, { Color = Color3.new(1, 1, 1), Transparency = 0.88 }, 0.15)
+			Tween(searchStroke, { Color = VVindUI.Theme.Border, Transparency = 0.88 }, 0.15)
 		end)
 	end
  
@@ -12201,7 +13324,7 @@ function Tab:AddCardGrid(opts)
 			local btn = Instance.new("TextButton")
 			btn.AutoButtonColor = false
 			btn.Text = ""
-			btn.BackgroundColor3 = Color3.new(1, 1, 1)
+			btn.BackgroundColor3 = VVindUI.Theme.Surface
 			btn.BackgroundTransparency = (sortName == currentSort) and 0.85 or 1
 			btn.BorderSizePixel = 0
 			btn.AutomaticSize = Enum.AutomaticSize.X
@@ -12396,14 +13519,16 @@ function Tab:AddCardGrid(opts)
 		popup.Name = "CardActionsPopup"
 		popup.Active = true
 		popup.BackgroundColor3 = VVindUI.Theme.Background
-		popup.BackgroundTransparency = 0.04
+		popup.BackgroundTransparency = self._window and self._window._interfaceTransparency or 0.04
 		popup.BorderSizePixel = 0
 		popup.Position = UDim2.fromOffset(math.round(px), math.round(py))
 		popup.Size = UDim2.fromOffset(popupW, popupH)
 		popup.ZIndex = Z.Popup
 		popup.Parent = VVindUI._Root
+		popup:SetAttribute("VVindInterfacePanel", true)
+		if self._window then popup:SetAttribute("VVindWindowId", self._window._id) end
 		Corner(popup, 10)
-		Stroke(popup, Color3.new(1, 1, 1), 1, 0.9)
+		Stroke(popup, VVindUI.Theme.Border, 1, 0.9)
 		GlassLayer(popup, 10, 0.985)
  
 		local actionsHolder = Instance.new("Frame")
@@ -12430,7 +13555,7 @@ function Tab:AddCardGrid(opts)
 			button.Name = "Action" .. i
 			button.Text = ""
 			button.AutoButtonColor = false
-			button.BackgroundColor3 = Color3.new(1, 1, 1)
+			button.BackgroundColor3 = VVindUI.Theme.Surface
 			button.BackgroundTransparency = 1
 			button.BorderSizePixel = 0
 			button.Size = UDim2.new(1, 0, 0, rowH)
@@ -12477,14 +13602,14 @@ function Tab:AddCardGrid(opts)
 	local function buildCard(item, animDelay)
 		local cell = Instance.new("Frame")
 		cell.Name = "GridCard"
-		cell.BackgroundColor3 = Color3.new(1, 1, 1)
+		cell.BackgroundColor3 = VVindUI.Theme.Surface
 		cell.BackgroundTransparency = 1
 		cell.BorderSizePixel = 0
 		cell.ClipsDescendants = true
 		cell.ZIndex = Z.Content + 2
 		cell.Parent = gridScroll
 		Corner(cell, VVindUI.Theme.CornerRadiusSm)
-		local cellStroke = Stroke(cell, Color3.new(1, 1, 1), 1, 1)
+		local cellStroke = Stroke(cell, VVindUI.Theme.Border, 1, 1)
  
 		local cellScale = Instance.new("UIScale")
 		cellScale.Scale = 0.9
@@ -12508,7 +13633,7 @@ function Tab:AddCardGrid(opts)
 		if item.Icon then
 			local ICON_BOX = 24
 			local iconHolder = Instance.new("Frame")
-			iconHolder.BackgroundColor3 = Color3.new(1, 1, 1)
+			iconHolder.BackgroundColor3 = VVindUI.Theme.Surface
 			iconHolder.BackgroundTransparency = 0.9
 			iconHolder.BorderSizePixel = 0
 			iconHolder.Size = UDim2.fromOffset(ICON_BOX, ICON_BOX)
@@ -12940,6 +14065,11 @@ function Tab:AddCardGrid(opts)
 	}
 end
  
+local function ReadControlValue(api)
+	local getter = api.Kind == "Keybind" and type(api.GetState) == "function" and api.GetState or api.Get
+	return getter(api)
+end
+
 function VVindUI:GetConfig()
 	local data = {}
 	local flags = {}
@@ -12948,7 +14078,7 @@ function VVindUI:GetConfig()
 	for _, flag in ipairs(flags) do
 		local api = self.Flags[flag]
 		if type(api.Get) ~= "function" then return nil, flag .. ": getter is unavailable" end
-		local ok, value = pcall(api.Get, api)
+		local ok, value = pcall(ReadControlValue, api)
 		if not ok then return nil, flag .. ": getter failed: " .. tostring(value) end
 		local encoded, serialized = pcall(Serialize, value)
 		if not encoded then return nil, flag .. ": value could not be serialized: " .. tostring(serialized) end
@@ -12968,6 +14098,33 @@ function VVindUI:GetConfigJSON()
 	if not ok then return nil, tostring(encoded) end
 	return encoded
 end
+
+function VVindUI:OnConfigLoaded(callback)
+	assert(type(callback) == "function", "OnConfigLoaded expects a callback")
+	return ConfigLoadedSignal.Connect(callback)
+end
+
+function VVindUI:GetValue(flag)
+	local api = self.Flags[flag]
+	if not api or type(api.Get) ~= "function" then return nil, "unknown flag: " .. tostring(flag) end
+	local ok, value = pcall(ReadControlValue, api)
+	if not ok then return nil, tostring(value) end
+	return value
+end
+
+function VVindUI:GetValues()
+	local values = {}
+	for flag, api in pairs(self.Flags) do
+		if type(api.Get) == "function" then
+			local ok, value = pcall(ReadControlValue, api)
+			if ok then values[flag] = CopyConfigValue(value) end
+		end
+	end
+	return values
+end
+
+VVindUI.GetFlag = VVindUI.GetValue
+VVindUI.GetCurrentValues = VVindUI.GetValues
 
 local function ResolveConfigFlag(flag)
 	local current, visited = flag, {}
@@ -13060,7 +14217,7 @@ local function PrepareConfig(input)
 	local changes = {}
 	for _, entry in ipairs(staged) do
 		local api = VVindUI.Flags[entry.Flag]
-		local ok, current = pcall(api.Get, api)
+		local ok, current = pcall(ReadControlValue, api)
 		if not ok then return false, entry.Flag .. ": getter failed: " .. tostring(current) end
 		if not ConfigValuesEqual(current, entry.Value) then
 			table.insert(changes, { Flag = entry.Flag, Before = CopyConfigValue(current), After = CopyConfigValue(entry.Value) })
@@ -13093,13 +14250,16 @@ function VVindUI:SetConfig(data, silent)
 	if not ok then return false, prepared end
 	local applied = {}
 	local previousApplying = self._ApplyingConfig
+	local previousSource = self._ChangeSource
 	self._ApplyingConfig = true
+	self._ChangeSource = "config"
 	for _, entry in ipairs(prepared.Staged) do
 		local api = self.Flags[entry.Flag]
-		local readOk, snapshot = pcall(api.Get, api)
+		local readOk, snapshot = pcall(ReadControlValue, api)
 		if not readOk then
 			local rollbackErrors = RollbackConfigValues(applied)
 			self._ApplyingConfig = previousApplying
+			self._ChangeSource = previousSource
 			local message = entry.Flag .. ": getter failed: " .. tostring(snapshot)
 			if #rollbackErrors > 0 then message ..= "; rollback failed: " .. table.concat(rollbackErrors, ", ") end
 			return false, message
@@ -13109,16 +14269,25 @@ function VVindUI:SetConfig(data, silent)
 		if not setOk then
 			local rollbackErrors = RollbackConfigValues(applied)
 			self._ApplyingConfig = previousApplying
+			self._ChangeSource = previousSource
 			local message = entry.Flag .. ": setter failed: " .. tostring(setErr)
 			if #rollbackErrors > 0 then message ..= "; rollback failed: " .. table.concat(rollbackErrors, ", ") end
 			return false, message
 		end
 	end
 	self._ApplyingConfig = previousApplying
+	self._ChangeSource = previousSource
 	if not previousApplying and not self._ApplyingAutoConfig and self.SaveAutoConfig then
 		local saved, saveErr = self:SaveAutoConfig()
 		if not saved then warn("[VindUI] config applied but automatic settings could not be saved: " .. tostring(saveErr)) end
 	end
+	ConfigLoadedSignal.Fire({
+		Source = "config",
+		Silent = silent ~= false,
+		Changes = prepared.Changes,
+		Migrations = prepared.Migrations,
+		Values = self:GetValues(),
+	})
 	return true, prepared.Migrations
 end
 
@@ -13147,7 +14316,7 @@ end
 function VVindUI:ListUIElements()
 	local out = {}
 	for flag, api in pairs(VVindUI.Flags) do
-		local ok, value = pcall(api.Get)
+		local ok, value = pcall(ReadControlValue, api)
 		table.insert(out, {
 			Flag  = flag,
 			Kind  = api.Kind,
@@ -13168,6 +14337,39 @@ function VVindUI:SetUIElementValue(flag, value, silent)
 	if not ok then return false, tostring(err) end
 	return true
 end
+
+function VVindUI:RegisterCustomFlag(flag, opts)
+	assert(type(flag) == "string" and flag:gsub("%s", "") ~= "", "custom flag must be a non-empty string")
+	assert(type(opts) == "table" and type(opts.Get) == "function" and type(opts.Set) == "function",
+		"custom flag expects Get and Set functions")
+	local validator = opts.Validate or opts.Validator
+	assert(validator == nil or type(validator) == "function", "custom flag Validate must be a function")
+	if validator then
+		local validate = validator
+		validator = function(value)
+			local result = table.pack(validate(value))
+			if result[1] == true and result.n == 1 then return true, value end
+			return table.unpack(result, 1, result.n)
+		end
+	end
+	local signal = MakeSignal()
+	local api = {
+		Get = function() return opts.Get() end,
+		Set = function(_, value, silent)
+			local result = opts.Set(value, silent)
+			if result == false then error("custom flag setter rejected the value", 2) end
+			if not silent then signal.Fire(opts.Get(), ChangeInfo()) end
+			return result
+		end,
+		OnChanged = function(_, callback) return signal.Connect(callback) end,
+		NotifyChanged = function() signal.Fire(opts.Get(), ChangeInfo()) end,
+		Destroy = function() signal.Clear() end,
+	}
+	return RegisterFlag({ Flag = flag, Text = opts.Text or flag }, api, "Custom", validator)
+end
+
+VVindUI.RegisterFlag = VVindUI.RegisterCustomFlag
+VVindUI.SetFlag = VVindUI.SetUIElementValue
  
 VVindUI.ConfigFolder = "Randoms"
 VVindUI.SettingsDirectory = STORAGE_FOLDER .. "/Settings/Randoms"
@@ -13415,6 +14617,7 @@ function VVindUI:SetConfigFolder(name)
 	self.settings_directory = self.SettingsDirectory
 	self.directory = STORAGE_FOLDER
 	if previousDirectory ~= self.SettingsDirectory then
+		self._AutoConfigLoadGeneration = (self._AutoConfigLoadGeneration or 0) + 1
 		self._AutoConfigCheckedPath = nil
 		self._AutoConfigPending = nil
 		self._AutoConfigApplied = nil
@@ -13426,6 +14629,32 @@ end
 
 local function AutoConfigPath()
 	return VVindUI.SettingsDirectory .. "/default_config.json"
+end
+
+function VVindUI:_QueueAutoConfigLoaded()
+	if type(self._AutoConfigPending) ~= "table" then return end
+	self._AutoConfigLoadGeneration = (self._AutoConfigLoadGeneration or 0) + 1
+	local generation = self._AutoConfigLoadGeneration
+	task.delay(0.2, function()
+		if self._AutoConfigLoadGeneration ~= generation or type(self._AutoConfigPending) ~= "table" then return end
+		local applied, pending = {}, {}
+		for sourceFlag in pairs(self._AutoConfigPending) do
+			if self._AutoConfigApplied and self._AutoConfigApplied[sourceFlag] then
+				table.insert(applied, sourceFlag)
+			else
+				table.insert(pending, sourceFlag)
+			end
+		end
+		table.sort(applied)
+		table.sort(pending)
+		ConfigLoadedSignal.Fire({
+			Source = "auto",
+			Silent = true,
+			AppliedFlags = applied,
+			PendingFlags = pending,
+			Values = self:GetValues(),
+		})
+	end)
 end
 
 function VVindUI:LoadAutoConfig()
@@ -13446,6 +14675,7 @@ function VVindUI:LoadAutoConfig()
 	self._AutoConfigPending = data
 	self._AutoConfigApplied = {}
 	for flag in pairs(self.Flags) do self:ApplyAutoConfigFlag(flag) end
+	self:_QueueAutoConfigLoaded()
 	return true
 end
 
@@ -13480,7 +14710,7 @@ function VVindUI:ApplyAutoConfigFlag(flag)
 		warn("[VindUI] saved setting for '" .. flag .. "' was skipped: " .. tostring(reason or normalized or valid))
 		return false
 	end
-	local getOk, snapshot = pcall(api.Get, api)
+	local getOk, snapshot = pcall(ReadControlValue, api)
 	if not getOk then
 		warn("[VindUI] saved setting for '" .. flag .. "' could not be applied: getter failed: " .. tostring(snapshot))
 		return false
@@ -13499,6 +14729,7 @@ function VVindUI:ApplyAutoConfigFlag(flag)
 	end
 	self._AutoConfigApplied = self._AutoConfigApplied or {}
 	self._AutoConfigApplied[sourceFlag] = true
+	self:_QueueAutoConfigLoaded()
 	return true
 end
 
@@ -13963,8 +15194,10 @@ function VVindUI:CreateAIAssistant(opts)
 end
  
 local function DestroyAllWindowJanitors()
-	for _, win in ipairs(VVindUI._Windows) do
+	local windows = table.clone(VVindUI._Windows)
+	for _, win in ipairs(windows) do
 		win._destroyed = true
+		FireWindowDestroyCallbacks(win)
 		if win._janitor then win._janitor:Destroy() end
 	end
 	table.clear(VVindUI._Windows)

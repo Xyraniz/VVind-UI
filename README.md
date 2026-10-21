@@ -5,7 +5,7 @@ A fork of VVind UI.
 A polished Luau interface library for Roblox with resizable windows, tabs, form controls, notifications, local configurations, data views, dock buttons, and optional service panels.
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2.8.1-7c5cff?style=for-the-badge">
+  <img alt="Version" src="https://img.shields.io/badge/version-2.10.0-7c5cff?style=for-the-badge">
   <img alt="Language" src="https://img.shields.io/badge/Luau-Roblox-00A2FF?style=for-the-badge&logo=roblox">
   <img alt="Library" src="https://img.shields.io/badge/UI-Vind%20Ui%20Reborn-24c76a?style=for-the-badge">
 </p>
@@ -31,6 +31,7 @@ A polished Luau interface library for Roblox with resizable windows, tabs, form 
 - [Optional integration settings](#optional-integration-settings)
 - [Compatibility](#compatibility)
 - [Troubleshooting](#troubleshooting)
+- [Changelog](CHANGELOG.md)
 
 ## Installation
 
@@ -114,6 +115,11 @@ local Window = VindUI:CreateWindow({
     DefaultTab = "Home",
     ToggleKeybind = Enum.KeyCode.RightShift,
     TogglePosition = UDim2.fromOffset(20, 220),
+    MobileToggleSize = UDim2.fromOffset(48, 48),
+    MobileToggleImage = "rbxassetid://1234567890",
+    MobileToggleDraggable = true,
+    BackgroundImage = "rbxassetid://1234567890",
+    BackgroundImageTransparency = 0.5,
     Folder = "Randoms",
 })
 ```
@@ -130,7 +136,14 @@ local Window = VindUI:CreateWindow({
 | `UseBlur` | `boolean` | Enables background blur. |
 | `DefaultTab` | `string` | Tab selected when the window opens. |
 | `ToggleKeybind` | `Enum.KeyCode` | Key used to show or hide the interface. |
-| `TogglePosition` | `UDim2` | Position of the mobile toggle button. |
+| `TogglePosition` | `UDim2` | Legacy position option for the mobile toggle button. |
+| `MobileToggleSize` | `number` or `UDim2` | Size of the mobile toggle button. A number creates a square button. |
+| `MobileToggleImage` | `string` | Image asset used by the mobile toggle button. |
+| `MobileTogglePosition` | `UDim2` | Initial position of the mobile toggle button. |
+| `MobileToggleDraggable` | `boolean` | Allows dragging the mobile toggle button; short touches still toggle the window. |
+| `ToggleSize`, `ToggleImage`, `ToggleDraggable` | Same as above | Short aliases for the mobile toggle options. |
+| `BackgroundImage` | `string` | Initial Roblox asset or HTTP(S) image for the window background. |
+| `BackgroundImageTransparency` | `number` | Initial image transparency from `0` (opaque) to `1` (invisible). |
 | `Folder` | `string` | Folder for automatic and named configs under `Vvind-UI/Settings`. |
 
 ### Window methods
@@ -143,11 +156,20 @@ Window:Toggle()
 Window:ToggleFullscreen()
 Window:SelectTab("Settings")
 Window:JumpToElement("Primary Color")
+Window:SetBackgroundImage("rbxassetid://1234567890")
+Window:SetBackgroundImageTransparency(0.5)
+Window:SetInterfaceTransparency(0.8)
+
+Window:OnDestroy(function()
+    cleanup()
+end)
 
 print(Window:IsOpen())
 
 Window:Destroy()
 ```
+
+`OnDestroy` fires once when the window is destroyed by the close action, by code, or by `VindUI:Unload()`. Minimizing the window does not fire it.
 
 ## Icons
 
@@ -292,13 +314,30 @@ local Label = Tab:AddLabel("Status: waiting")
 Label:Set("Status: ready")
 print(Label:Get())
 Label:Destroy()
+
+local RichLabel = Tab:AddLabel({
+    Text = "Status: <b>ready</b>",
+    RichText = true,
+    Color = Color3.fromRGB(130, 210, 160),
+})
+RichLabel:Set({ Text = "Status: <i>connected</i>", RichText = true })
 ```
 
 #### Section
 
 ```lua
-local Section = Tab:AddSection({ Text = "Combat", Icon = "Lucide:swords" })
+local Section = Tab:AddSection({
+    Text = "Combat",
+    Icon = "Lucide:swords",
+    Columns = 2,
+    Collapsible = true,
+})
 Section:Set("Combat Settings")
+Section:AddToggle({ Text = "ESP", Flag = "combat_esp" })
+Section:AddSlider({ Text = "Range", Min = 1, Max = 100, Default = 30, Flag = "combat_range" })
+Section:SetColumn(1) -- choose the next column explicitly; two-column sections otherwise alternate
+Section:SetCollapsed(true)
+Section:Destroy() -- also destroys controls created inside the section
 
 Tab:AddSection("Player", "Lucide:user")
 ```
@@ -327,6 +366,8 @@ local Paragraph = Tab:AddParagraph({
 Paragraph:Set("New content")
 Paragraph:SetTitle("Information")
 print(Paragraph:Get())
+
+Paragraph:Set({ Text = "<b>Build notes</b>\nAll systems ready.", RichText = true })
 ```
 
 ### Actions and cards
@@ -391,8 +432,8 @@ Tab:AddLoadoutGroup({
 
 ```lua
 Tab:AddChangelogEntry({
-    Version = "2.8.1",
-    Date = "August 27, 2026",
+    Version = "2.10.0",
+    Date = "October 20, 2026",
     Changes = {
         { Type = "Added", Text = "New panel" },
         { Type = "Changed", Text = "Updated layout" },
@@ -464,7 +505,22 @@ Dropdown:Refresh({ "One", "Two", "Three" })
 print(Dropdown:Get())
 ```
 
-With `MultiSelect = true`, `Default`, `Set`, `Get`, and the callback use a table of selected values.
+Options can keep a stable value while showing a different label. Larger lists are searchable by default; set `Searchable` to enable or disable search explicitly:
+
+```lua
+local Animation = Tab:AddDropdown({
+    Text = "Animation",
+    Options = {
+        { Label = "Idle stance", Value = "idle_01" },
+        { Label = "Run", Value = "run_02" },
+    },
+    Searchable = true,
+    Default = "idle_01",
+})
+print(Animation:Get()) -- "idle_01"
+```
+
+`SetOptions` keeps the current value when it still exists. If it disappears, a single-select dropdown falls back to its valid `Default` or the first option; a multi-select dropdown removes only values that no longer exist. With `MultiSelect = true`, `Default`, `Set`, `Get`, and the callback use a table of selected values.
 
 #### Textbox
 
@@ -501,10 +557,19 @@ print(Picker:Get())
 #### Keybind
 
 ```lua
+local EspToggle = Tab:AddToggle({
+    Text = "ESP",
+    Default = false,
+    Flag = "esp_enabled",
+})
+
 local Keybind = Tab:AddKeybind({
-    Text = "Toggle menu",
+    Text = "ESP Keybind",
     Icon = "Lucide:keyboard",
-    Default = Enum.KeyCode.RightShift,
+    Default = Enum.KeyCode.E,
+    Mode = "Toggle",
+    Context = "combat",
+    ToggleFlag = "esp_enabled",
     Flag = "menu_key",
     Callback = function(key, event)
         if event == "bind" then print("New key:", key) end
@@ -514,7 +579,16 @@ local Keybind = Tab:AddKeybind({
 
 Keybind:Set(Enum.KeyCode.Insert)
 print(Keybind:Get())
+print(Keybind:GetState())
+print(#Keybind:GetConflicts())
+VindUI:SetKeybindContext("combat")
 ```
+
+Keybinds accept keyboard and gamepad `Enum.KeyCode` values, plus mouse buttons 1–3 (`M1`, `M2`, `M3`). `Mode` accepts `Press`, `Toggle`, `Hold`, or `Always`; right-click the key or tap the mode chip to change it. `ToggleFlag` links `Toggle`, `Hold`, and `Always` to a registered toggle. Without a linked flag, `Toggle` and `Always` expose their active state through `GetActive()` and `GetState()`.
+
+Each keybind can have a `Context`; `global` binds work in every context. Change the active context with `VindUI:SetKeybindContext("combat")`. Two binds on the same key and overlapping contexts are listed by `GetConflicts()` and highlighted; an ambiguous key press does not activate either one. Use `SetContext`, `SetMode`, `SetActive`, `Rebind`, `Unbind`, `Reset`, and the `OnModeChanged` / `OnContextChanged` signals to manage a bind at runtime. `Get()` still returns only the assigned key; `GetState()` returns key, mode, context, and active state.
+
+Backspace or Delete clears a bind; Escape cancels capture. The callback receives `"bind"` when the assigned key changes and `"press"` or `"release"` for activation. `OnChanged` reports key changes only, while `OnPressed` reports activations. Configuration saves and restores the complete keybind state.
 
 ### Rating
 
@@ -668,7 +742,7 @@ Advanced options include `MaxColumns`, `CardWidth`, `MinCardHeight`, `CardPaddin
 | Element | Main methods |
 | --- | --- |
 | `Label` | `Set`, `Get`, `Destroy` |
-| `Section` | `Set`, `Destroy` |
+| `Section` | `Set`, `AddToggle`, `AddButton`, other tab control methods, `SetColumn`, `SetCollapsed`, `ToggleCollapsed`, `Destroy` |
 | `Divider` | `Destroy` |
 | `LineText` | `Set`, `Destroy` |
 | `Paragraph` | `Set`, `Get`, `SetTitle`, `Destroy` |
@@ -678,7 +752,7 @@ Advanced options include `MaxColumns`, `CardWidth`, `MinCardHeight`, `CardPaddin
 | `Dropdown` | `Set`, `Get`, `SetOptions`, `Refresh`, `OnChanged`, `Destroy` |
 | `Textbox` | `Set`, `Get`, `OnChanged`, `Destroy` |
 | `ColorPicker` | `Set`, `Get`, `OnChanged`, `Destroy` |
-| `Keybind` | `Set`, `Get`, `OnChanged`, `Destroy` |
+| `Keybind` | `Set`, `Get`, `GetState`, `GetActive`, `SetMode`, `SetContext`, `SetActive`, `GetConflicts`, `Rebind`, `Unbind`, `Reset`, `OnChanged`, `OnStateChanged`, `OnPressed`, `OnModeChanged`, `OnContextChanged`, `Destroy` |
 | `Console` | `Log`, `Clear`, `Destroy` |
 | `Table` | `SetRows`, `GetRows`, `Destroy` |
 | `InfoGrid` | `SetValue`, `Destroy` |
@@ -713,6 +787,31 @@ end
 ```
 
 Pass `true` as the final argument to apply values without firing callbacks.
+
+`OnChanged` callbacks receive metadata with `Source` set to `user`, `code`, or `config`. `OnConfigLoaded` reports `config` after `SetConfig` completes and `auto` after automatic settings have been applied to the currently registered controls. Automatic settings are applied as controls are created, so an `auto` event can include `PendingFlags` if some saved flags have not been registered yet. Silent config loading suppresses per-control callbacks and fires `OnConfigLoaded` after the full config application so game logic can synchronize from the final values:
+
+```lua
+VindUI:OnConfigLoaded(function(info)
+    print(info.Source, VindUI:GetValue("combat_enabled"))
+    syncGameplay(VindUI:GetValues())
+end)
+```
+
+Register script-owned values with a validator and change signal:
+
+```lua
+local enabled = false
+local ExternalEnabled = VindUI:RegisterCustomFlag("external_enabled", {
+    Get = function() return enabled end,
+    Set = function(value) enabled = value end,
+    Validate = function(value)
+        return type(value) == "boolean", value, "expected a boolean"
+    end,
+})
+ExternalEnabled:OnChanged(function(value, info)
+    print(value, info.Source)
+end)
+```
 
 ### Local files
 
@@ -962,6 +1061,15 @@ Pass `Tools` when creating the assistant to register custom handlers. Validate e
 ```lua
 VindUI:SetScaleRange(0.75, 1.35)
 VindUI:SetBlurEnabled(true)
+VindUI:SetTheme({
+    Background = Color3.fromRGB(18, 20, 27),
+    Surface = Color3.fromRGB(27, 30, 40),
+    SurfaceHover = Color3.fromRGB(36, 41, 54),
+    Text = Color3.fromRGB(240, 242, 248),
+    TextDim = Color3.fromRGB(155, 162, 180),
+    Accent = Color3.fromRGB(140, 120, 255),
+    Border = Color3.fromRGB(90, 95, 115),
+})
 
 local clean = VindUI:SanitizeText(userInput, { MaxLength = 300 })
 
