@@ -600,25 +600,6 @@ local function SetPrivateTabRemembered(name, remember)
 	end
 end
  
-local RunCountPath = STORAGE_FOLDER .. "/RunCount.txt"
- 
-local function BumpRunCount()
-	local count = 1
-	if fn_isfile and fn_readfile then
-		local existsOk, exists = pcall(fn_isfile, RunCountPath)
-		if existsOk and exists then
-			local ok, data = pcall(fn_readfile, RunCountPath)
-			local n = ok and tonumber(data)
-			if n then count = math.floor(n) + 1 end
-		end
-	end
-	if fn_writefile then
-		EnsureAssetsFolder()
-		pcall(fn_writefile, RunCountPath, tostring(count))
-	end
-	return count
-end
- 
 local function GetExecutorName()
 	local ok, name, version = pcall(function()
 		if identifyexecutor then return identifyexecutor() end
@@ -6545,16 +6526,16 @@ function Window:AddGlobalChatPanel(opts)
 		local text = inputBox.Text:gsub("^%s+", ""):gsub("%s+$", "")
 		if text == "" or not service then return end
 		inputBox.Text = ""
-		local sendUserId = anonymousMode and 0 or LocalPlayer.UserId
+		local localUserId = anonymousMode and 0 or LocalPlayer.UserId
 		task.spawn(function()
-			local result, err = service:SendChatMessage(sendUserId, text)
+			local result, err = service:SendChatMessage(text)
 			if not result then
 				VVindUI:Notify({ Title = "Chat", Text = tostring(err), Type = "error", Duration = 3 })
 				return
 			end
 			seenIds[result.Id] = true
 			if result.Id > lastSeenId then lastSeenId = result.Id end
-			addBubble({ UserId = sendUserId, Text = text, CreatedAt = os.time() * 1000 }, true)
+			addBubble({ UserId = localUserId, Text = text, CreatedAt = os.time() * 1000 }, true)
 		end)
 	end
  
@@ -6568,8 +6549,8 @@ function Window:AddGlobalChatPanel(opts)
 		VVindUI:Notify({
 			Title = "Chat",
 			Text  = anonymousMode
-				and "Anonymous mode on -- new messages won't reveal your avatar."
-				or "Anonymous mode off -- new messages show your avatar.",
+				and "Anonymous view on -- your local message hides your avatar."
+				or "Anonymous view off -- your local message shows your avatar on this device.",
 			Type  = "info",
 			Duration = 3,
 		})
@@ -9750,8 +9731,6 @@ function Tab:AddSystemInfoGrid(opts)
 	local Stats = game:GetService("Stats")
 	local LocalPlayer = Players.LocalPlayer
  
-	local runCount = BumpRunCount()
- 
 	local grid = self:AddInfoGrid({
 		Title       = opts.Title or "System Info",
 		Description = opts.Description,
@@ -9761,7 +9740,6 @@ function Tab:AddSystemInfoGrid(opts)
 			{ Label = "FPS",           Value = "--" },
 			{ Label = "Ping",          Value = "-- ms" },
 			{ Label = "Executor",      Value = GetExecutorName() },
-			{ Label = "Executions",    Value = tostring(runCount) },
 			{ Label = "Server Region", Value = "Unknown" },
 			{ Label = "Time of Day",   Value = "--:--" },
 		},
@@ -9808,386 +9786,6 @@ function Tab:AddSystemInfoGrid(opts)
 	end)
  
 	return grid
-end
- 
-function Tab:AddActiveUsersGrid(opts)
-	opts = opts or {}
-	local service = opts.Service
-	local interval = opts.Interval or 30
- 
-	local grid = self:AddInfoGrid({
-		Title       = opts.Title or "Active Users",
-		Description = opts.Description,
-		Color       = opts.Color,
-		Columns     = 1,
-		Items = { { Label = "Active Now", Value = "--" } },
-	})
- 
-	if not service then
-		grid:SetValue("Active Now", "No Service configured")
-		return grid
-	end
- 
-	local alive = true
-	self._janitor:Add(function() alive = false end)
- 
-	task.spawn(function()
-		while alive and grid.Instance.Parent do
-			service:Heartbeat()
-			local count, err = service:GetActiveCount()
-			if alive and grid.Instance.Parent then
-				grid:SetValue("Active Now", count and tostring(count) or ("Error: " .. tostring(err)))
-			end
-			task.wait(interval)
-		end
-	end)
- 
-	return grid
-end
- 
-function Tab:AddLeaderboard(opts)
-	opts = opts or {}
-	local jan = self._janitor
-	local service = opts.Service
-	local interval = opts.Interval or 30
-	local limit = math.clamp(opts.Limit or 5, 1, 50)
-	local title = opts.Title or "Leaderboard"
-	local hasDesc = opts.Description and opts.Description ~= ""
- 
-	local PAD = 12
-	local HEADER_H = hasDesc and 32 or 16
-	local ROW_H, ROW_GAP = 44, 6
-	local listY = PAD + HEADER_H + 12
-	local listH = limit * ROW_H + (limit - 1) * ROW_GAP
-	local totalHeight = listY + listH + PAD
- 
-	local container = Instance.new("Frame")
-	container.Name = "Leaderboard"
-	container.BackgroundColor3 = VVindUI.Theme.Surface
-	container.BackgroundTransparency = 0.35
-	container.BorderSizePixel = 0
-	container.ClipsDescendants = true
-	container.Size = UDim2.new(1, 0, 0, totalHeight)
-	container.ZIndex = Z.Content
-	container.Parent = self._page
-	Corner(container, VVindUI.Theme.CornerRadiusSm)
-	Stroke(container, Color3.new(1, 1, 1), 1, 0.92)
-	self._window:_RegisterSearchable(self, title, container)
- 
-	local titleLabel = Instance.new("TextLabel")
-	titleLabel.BackgroundTransparency = 1
-	titleLabel.FontFace = VVindUI.Theme.Font
-	titleLabel.Text = title
-	titleLabel.TextColor3 = VVindUI.Theme.Text
-	titleLabel.TextSize = 14
-	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-	titleLabel.TextTruncate = Enum.TextTruncate.AtEnd
-	titleLabel.Position = UDim2.fromOffset(PAD, PAD)
-	titleLabel.Size = UDim2.new(1, -PAD * 2 - 32, 0, 16)
-	titleLabel.ZIndex = Z.Content + 1
-	titleLabel.Parent = container
- 
-	if hasDesc then
-		local descLabel = Instance.new("TextLabel")
-		descLabel.BackgroundTransparency = 1
-		descLabel.FontFace = VVindUI.Theme.FontRegular
-		descLabel.Text = opts.Description
-		descLabel.TextColor3 = VVindUI.Theme.TextDim
-		descLabel.TextSize = 12
-		descLabel.TextWrapped = true
-		descLabel.TextXAlignment = Enum.TextXAlignment.Left
-		descLabel.TextYAlignment = Enum.TextYAlignment.Top
-		descLabel.Position = UDim2.fromOffset(PAD, PAD + 18)
-		descLabel.Size = UDim2.new(1, -PAD * 2 - 32, 0, 14)
-		descLabel.ZIndex = Z.Content + 1
-		descLabel.Parent = container
-	end
- 
-	local revealMe = opts.RevealByDefault == true
- 
-	local revealBtn = Instance.new("TextButton")
-	revealBtn.Name = "RevealToggle"
-	revealBtn.Text = ""
-	revealBtn.AutoButtonColor = false
-	revealBtn.BackgroundColor3 = Color3.new(1, 1, 1)
-	revealBtn.BackgroundTransparency = 1
-	revealBtn.BorderSizePixel = 0
-	revealBtn.AnchorPoint = Vector2.new(1, 0)
-	revealBtn.Position = UDim2.new(1, -PAD, 0, PAD - 4)
-	revealBtn.Size = UDim2.fromOffset(24, 24)
-	revealBtn.ZIndex = Z.Content + 2
-	revealBtn.Parent = container
-	Corner(revealBtn, 7)
- 
-	local revealIcon = Instance.new("ImageLabel")
-	revealIcon.BackgroundTransparency = 1
-	revealIcon.Image = ResolveIcon(revealMe and "eye" or "eye-off")
-	revealIcon.ImageColor3 = VVindUI.Theme.TextDim
-	revealIcon.Size = UDim2.fromOffset(14, 14)
-	revealIcon.AnchorPoint = Vector2.new(0.5, 0.5)
-	revealIcon.Position = UDim2.fromScale(0.5, 0.5)
-	revealIcon.ZIndex = Z.Content + 3
-	revealIcon.Parent = revealBtn
- 
-	jan:Add(revealBtn.MouseEnter:Connect(function()
-		Tween(revealBtn, { BackgroundTransparency = 0.9 }, 0.12)
-		Tween(revealIcon, { ImageColor3 = VVindUI.Theme.Text }, 0.12)
-	end))
-	jan:Add(revealBtn.MouseLeave:Connect(function()
-		Tween(revealBtn, { BackgroundTransparency = 1 }, 0.12)
-		Tween(revealIcon, { ImageColor3 = VVindUI.Theme.TextDim }, 0.12)
-	end))
- 
-	local divider = Instance.new("Frame")
-	divider.BackgroundColor3 = Color3.new(1, 1, 1)
-	divider.BackgroundTransparency = 0.92
-	divider.BorderSizePixel = 0
-	divider.Position = UDim2.fromOffset(0, PAD + HEADER_H + 8)
-	divider.Size = UDim2.new(1, 0, 0, 1)
-	divider.ZIndex = Z.Content + 1
-	divider.Parent = container
- 
-	local list = Instance.new("Frame")
-	list.Name = "Rows"
-	list.BackgroundTransparency = 1
-	list.Position = UDim2.fromOffset(PAD, listY)
-	list.Size = UDim2.new(1, -PAD * 2, 0, listH)
-	list.ZIndex = Z.Content + 1
-	list.Parent = container
- 
-	local listLayout = Instance.new("UIListLayout")
-	listLayout.Padding = UDim.new(0, ROW_GAP)
-	listLayout.SortOrder = Enum.SortOrder.LayoutOrder
-	listLayout.Parent = list
- 
-	local emptyLabel = Instance.new("TextLabel")
-	emptyLabel.BackgroundTransparency = 1
-	emptyLabel.FontFace = VVindUI.Theme.FontRegular
-	emptyLabel.Text = "No one's run this yet"
-	emptyLabel.TextColor3 = VVindUI.Theme.TextDim
-	emptyLabel.TextSize = 12
-	emptyLabel.Position = UDim2.fromOffset(PAD, listY + 10)
-	emptyLabel.Size = UDim2.new(1, -PAD * 2, 0, 16)
-	emptyLabel.Visible = false
-	emptyLabel.ZIndex = Z.Content + 1
-	emptyLabel.Parent = container
- 
-	local RANK_COLORS = {
-		[1] = Color3.fromRGB(255, 196, 64),
-		[2] = Color3.fromRGB(203, 209, 217),
-		[3] = Color3.fromRGB(205, 141, 92),
-	}
-	local RANK_ICONS = { [1] = "crown", [2] = "medal", [3] = "medal" }
- 
-	local function formatSeconds(total)
-		total = math.floor(total or 0)
-		local h = math.floor(total / 3600)
-		local m = math.floor((total % 3600) / 60)
-		if h > 0 then return string.format("%dh %dm", h, m) end
-		if m > 0 then return string.format("%dm", m) end
-		return string.format("%ds", total)
-	end
- 
-	local function fallbackLabel(identity)
-		local tag = (identity or ""):gsub("-", ""):sub(1, 4):upper()
-		return "Player-" .. (tag ~= "" and tag or "????")
-	end
- 
-	local rowFrames = {}
-	local function clearRows()
-		for _, f in ipairs(rowFrames) do f:Destroy() end
-		table.clear(rowFrames)
-	end
- 
-	local function buildRow(index, item)
-		local rankColor = RANK_COLORS[index]
- 
-		local row = Instance.new("Frame")
-		row.Name = "Row" .. index
-		row.Active = true
-		row.BackgroundColor3 = Color3.new(1, 1, 1)
-		row.BackgroundTransparency = item.IsYou and 0.9 or 0.96
-		row.BorderSizePixel = 0
-		row.LayoutOrder = index
-		row.Size = UDim2.new(1, 0, 0, ROW_H)
-		row.ZIndex = Z.Content + 2
-		row.Parent = list
-		Corner(row, VVindUI.Theme.CornerRadiusSm)
-		Stroke(row, Color3.new(1, 1, 1), 1, item.IsYou and 0.88 or 0.94)
- 
-		local baseTransparency = row.BackgroundTransparency
-		row.MouseEnter:Connect(function() Tween(row, { BackgroundTransparency = baseTransparency - 0.05 }, 0.12) end)
-		row.MouseLeave:Connect(function() Tween(row, { BackgroundTransparency = baseTransparency }, 0.12) end)
- 
-		local rowPad = Instance.new("UIPadding")
-		rowPad.PaddingLeft = UDim.new(0, 10)
-		rowPad.PaddingRight = UDim.new(0, 10)
-		rowPad.Parent = row
- 
-		local badge = Instance.new("Frame")
-		badge.AnchorPoint = Vector2.new(0, 0.5)
-		badge.Position = UDim2.new(0, 0, 0.5, 0)
-		badge.Size = UDim2.fromOffset(28, 28)
-		badge.BackgroundColor3 = Color3.new(1, 1, 1)
-		badge.BackgroundTransparency = 0.94
-		badge.BorderSizePixel = 0
-		badge.ZIndex = Z.Content + 3
-		badge.Parent = row
-		Corner(badge, 14)
-		Stroke(badge, Color3.new(1, 1, 1), 1, 0.9)
- 
-		if rankColor then
-			local badgeIcon = Instance.new("ImageLabel")
-			badgeIcon.BackgroundTransparency = 1
-			badgeIcon.Image = ResolveIcon(RANK_ICONS[index])
-			badgeIcon.ImageColor3 = rankColor
-			badgeIcon.Size = UDim2.fromOffset(15, 15)
-			badgeIcon.AnchorPoint = Vector2.new(0.5, 0.5)
-			badgeIcon.Position = UDim2.fromScale(0.5, 0.5)
-			badgeIcon.ZIndex = Z.Content + 4
-			badgeIcon.Parent = badge
-		else
-			local badgeLabel = Instance.new("TextLabel")
-			badgeLabel.BackgroundTransparency = 1
-			badgeLabel.FontFace = VVindUI.Theme.Font
-			badgeLabel.Text = "#" .. tostring(index)
-			badgeLabel.TextColor3 = VVindUI.Theme.TextDim
-			badgeLabel.TextSize = 11
-			badgeLabel.Size = UDim2.fromScale(1, 1)
-			badgeLabel.ZIndex = Z.Content + 4
-			badgeLabel.Parent = badge
-		end
- 
-		local avatarHolder = Instance.new("Frame")
-		avatarHolder.AnchorPoint = Vector2.new(0, 0.5)
-		avatarHolder.Position = UDim2.new(0, 34, 0.5, 0)
-		avatarHolder.Size = UDim2.fromOffset(28, 28)
-		avatarHolder.BackgroundColor3 = Color3.new(1, 1, 1)
-		avatarHolder.BackgroundTransparency = 0.94
-		avatarHolder.BorderSizePixel = 0
-		avatarHolder.ClipsDescendants = true
-		avatarHolder.ZIndex = Z.Content + 3
-		avatarHolder.Parent = row
-		Corner(avatarHolder, 14)
-		Stroke(avatarHolder, Color3.new(1, 1, 1), 1, 0.85)
- 
-		if item.UserId and item.UserId ~= 0 then
-			local avatarImg = Instance.new("ImageLabel")
-			avatarImg.BackgroundTransparency = 1
-			avatarImg.ScaleType = Enum.ScaleType.Crop
-			avatarImg.Size = UDim2.fromScale(1, 1)
-			avatarImg.ZIndex = Z.Content + 4
-			avatarImg.Parent = avatarHolder
-			task.spawn(function()
-				local ok, content = pcall(
-					Players.GetUserThumbnailAsync,
-					Players,
-					item.UserId,
-					Enum.ThumbnailType.HeadShot,
-					Enum.ThumbnailSize.Size48x48
-				)
-				if ok and content and avatarImg.Parent then
-					avatarImg.Image = content
-				end
-			end)
-		else
-			local placeholder = Instance.new("ImageLabel")
-			placeholder.BackgroundTransparency = 1
-			placeholder.Image = ResolveIcon("user")
-			placeholder.ImageColor3 = VVindUI.Theme.TextDim
-			placeholder.Size = UDim2.fromOffset(14, 14)
-			placeholder.AnchorPoint = Vector2.new(0.5, 0.5)
-			placeholder.Position = UDim2.fromScale(0.5, 0.5)
-			placeholder.ZIndex = Z.Content + 4
-			placeholder.Parent = avatarHolder
-		end
- 
-		local nameLabel = Instance.new("TextLabel")
-		nameLabel.BackgroundTransparency = 1
-		nameLabel.FontFace = VVindUI.Theme.Font
-		nameLabel.Text = (item.NamePreview and item.NamePreview ~= "" and item.NamePreview or fallbackLabel(item.Identity))
-			.. (item.IsYou and "  (You)" or "")
-		nameLabel.TextColor3 = VVindUI.Theme.Text
-		nameLabel.TextSize = 13
-		nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-		nameLabel.TextTruncate = Enum.TextTruncate.AtEnd
-		nameLabel.Position = UDim2.fromOffset(70, 0)
-		nameLabel.Size = UDim2.new(1, -70 - 68, 1, 0)
-		nameLabel.ZIndex = Z.Content + 3
-		nameLabel.Parent = row
- 
-		local timeLabel = Instance.new("TextLabel")
-		timeLabel.BackgroundTransparency = 1
-		timeLabel.FontFace = VVindUI.Theme.FontRegular
-		timeLabel.Text = formatSeconds(item.Seconds)
-		timeLabel.TextColor3 = VVindUI.Theme.TextDim
-		timeLabel.TextSize = 12
-		timeLabel.TextXAlignment = Enum.TextXAlignment.Right
-		timeLabel.AnchorPoint = Vector2.new(1, 0)
-		timeLabel.Position = UDim2.new(1, 0, 0, 0)
-		timeLabel.Size = UDim2.fromOffset(60, ROW_H)
-		timeLabel.ZIndex = Z.Content + 3
-		timeLabel.Parent = row
- 
-		return row
-	end
- 
-	local function renderRows(items)
-		clearRows()
-		emptyLabel.Visible = #items == 0
- 
-		for i, item in ipairs(items) do
-			if i > limit then break end
-			table.insert(rowFrames, buildRow(i, item))
-		end
-	end
- 
-	renderRows({})
- 
-	if not service then
-		return { Instance = container }
-	end
- 
-	local function maskName(letters, stars)
-		local name = LocalPlayer.Name or ""
-		return name:sub(1, letters) .. stars
-	end
- 
-	jan:Add(revealBtn.MouseButton1Click:Connect(function()
-		revealMe = not revealMe
-		revealIcon.Image = ResolveIcon(revealMe and "eye" or "eye-off")
-		VVindUI:Notify({
-			Title = "Leaderboard",
-			Text  = revealMe
-				and "Your avatar and more of your name will show on the leaderboard."
-				or "Back to anonymous -- only 2 letters of your name will show.",
-			Type  = "info",
-			Duration = 3,
-		})
-	end))
- 
-	local alive = true
-	jan:Add(function() alive = false end)
- 
-	task.spawn(function()
-		while alive and container.Parent do
-			local payload = revealMe
-				and { UserId = LocalPlayer.UserId, NamePreview = maskName(4, "*******") }
-				or { UserId = 0, NamePreview = maskName(2, "********") }
-			service:Heartbeat(payload)
- 
-			local items, err = service:GetLeaderboard(limit)
-			if alive and container.Parent and items then
-				for _, item in ipairs(items) do
-					item.IsYou = item.Identity == service.Identity
-				end
-				renderRows(items)
-			end
-			task.wait(interval)
-		end
-	end)
- 
-	return { Instance = container }
 end
  
 function Tab:AddGradientCard(opts)
@@ -13941,37 +13539,50 @@ VVindUI.register_flag_migration = VVindUI.RegisterFlagMigration
 VVindUI.load_auto_config = VVindUI.LoadAutoConfig
 VVindUI.save_auto_config = VVindUI.SaveAutoConfig
  
-local CLOUD_IDENTITY_PATH = STORAGE_FOLDER .. "/cloud_identity.json"
- 
-local function LoadCloudIdentity()
+local CLOUD_TOKENS_PATH = STORAGE_FOLDER .. "/cloud_tokens.json"
+local OLD_CLOUD_IDENTITY_PATH = STORAGE_FOLDER .. "/cloud_identity.json"
+
+local function LoadCloudTokens()
 	if fn_isfile and fn_readfile then
-		local existsOk, exists = pcall(fn_isfile, CLOUD_IDENTITY_PATH)
-		if existsOk and exists then
-			local ok, raw = pcall(fn_readfile, CLOUD_IDENTITY_PATH)
-			if ok then
-				local decodeOk, decoded = pcall(function() return HttpService:JSONDecode(raw) end)
-				if decodeOk and type(decoded) == "table" and decoded.Id then
-					decoded.Tokens = decoded.Tokens or {}
-					return decoded
+		for _, path in ipairs({ CLOUD_TOKENS_PATH, OLD_CLOUD_IDENTITY_PATH }) do
+			local existsOk, exists = pcall(fn_isfile, path)
+			if existsOk and exists then
+				local ok, raw = pcall(fn_readfile, path)
+				if ok then
+					local decodeOk, decoded = pcall(function() return HttpService:JSONDecode(raw) end)
+					if decodeOk and type(decoded) == "table" and type(decoded.Tokens) == "table" then
+						return decoded.Tokens
+					end
 				end
 			end
 		end
 	end
-	return nil
+	return {}
 end
- 
-local function SaveCloudIdentity(identity)
-	if not fn_writefile then return end
+
+local function SaveCloudTokens(tokens)
+	if not fn_writefile then
+		if fn_isfile and fn_delfile then
+			local existsOk, exists = pcall(fn_isfile, OLD_CLOUD_IDENTITY_PATH)
+			if existsOk and exists then pcall(fn_delfile, OLD_CLOUD_IDENTITY_PATH) end
+		end
+		return false
+	end
 	EnsureAssetsFolder()
-	pcall(fn_writefile, CLOUD_IDENTITY_PATH, HttpService:JSONEncode(identity))
-end
- 
-local function GetOrCreateCloudIdentity()
-	local identity = LoadCloudIdentity()
-	if identity then return identity end
-	identity = { Id = HttpService:GenerateGUID(false), Tokens = {} }
-	SaveCloudIdentity(identity)
-	return identity
+	local encodeOk, encoded = pcall(function() return HttpService:JSONEncode({ Tokens = tokens }) end)
+	if not encodeOk then return false end
+		local writeOk, writeResult = pcall(fn_writefile, CLOUD_TOKENS_PATH, encoded)
+		if not writeOk or writeResult == false then return false end
+
+	if fn_isfile then
+		local existsOk, exists = pcall(fn_isfile, OLD_CLOUD_IDENTITY_PATH)
+		if existsOk and exists then
+			if fn_delfile then pcall(fn_delfile, OLD_CLOUD_IDENTITY_PATH) end
+			local checkOk, stillExists = pcall(fn_isfile, OLD_CLOUD_IDENTITY_PATH)
+			if checkOk and stillExists then pcall(fn_writefile, OLD_CLOUD_IDENTITY_PATH, encoded) end
+		end
+	end
+	return true
 end
  
 local CLOUD_PUBLISH_COOLDOWN = 15
@@ -13980,8 +13591,8 @@ local LastCloudPublishAt = 0
 function VVindUI:CloudService(opts)
 	opts = opts or {}
 	local baseUrl = opts.BaseUrl
-	local scriptId = opts.Script or "default"
-	local identity = GetOrCreateCloudIdentity()
+	local cloudTokens = LoadCloudTokens()
+	SaveCloudTokens(cloudTokens)
 	local httpRequest = (syn and syn.request) or http_request or request
  
 	local function apiRequest(method, path, body, extraHeaders)
@@ -13994,8 +13605,6 @@ function VVindUI:CloudService(opts)
  
 		local headers = {
 			["Content-Type"] = "application/json",
-			["X-VVindUI-Identity"] = identity.Id,
-			["X-VVindUI-Script"] = scriptId,
 		}
 		if extraHeaders then
 			for k, v in pairs(extraHeaders) do headers[k] = v end
@@ -14024,7 +13633,7 @@ function VVindUI:CloudService(opts)
 		return decoded, nil
 	end
  
-	local api = { Identity = identity.Id }
+	local api = {}
  
 	function api:List(state)
 		state = state or {}
@@ -14089,14 +13698,14 @@ function VVindUI:CloudService(opts)
 		if not decoded then return nil, err end
  
 		if decoded.Id and decoded.OwnerToken then
-			identity.Tokens[decoded.Id] = decoded.OwnerToken
-			SaveCloudIdentity(identity)
+			cloudTokens[decoded.Id] = decoded.OwnerToken
+			SaveCloudTokens(cloudTokens)
 		end
 		return decoded
 	end
  
 	function api:Delete(id)
-		local token = identity.Tokens[id]
+		local token = cloudTokens[id]
 		if not token then
 			return false, "You don't have publish rights for this config on this device."
 		end
@@ -14104,8 +13713,8 @@ function VVindUI:CloudService(opts)
 			["X-VVindUI-Owner-Token"] = token,
 		})
 		if not decoded then return false, err end
-		identity.Tokens[id] = nil
-		SaveCloudIdentity(identity)
+		cloudTokens[id] = nil
+		SaveCloudTokens(cloudTokens)
 		return true
 	end
  
@@ -14119,8 +13728,8 @@ function VVindUI:CloudService(opts)
 		return apiRequest("POST", "/configs/" .. id .. "/download")
 	end
  
-	function api:SendChatMessage(userId, text)
-		return apiRequest("POST", "/chat/send", { UserId = userId, Text = text })
+	function api:SendChatMessage(text)
+		return apiRequest("POST", "/chat/send", { Text = text })
 	end
  
 	function api:PollChatMessages(sinceId)
@@ -14133,24 +13742,6 @@ function VVindUI:CloudService(opts)
 		local decoded, err = apiRequest("POST", "/chat/" .. tostring(messageId) .. "/report")
 		if not decoded then return false, err end
 		return true
-	end
- 
-	function api:Heartbeat(payload)
-		local decoded, err = apiRequest("POST", "/presence/heartbeat", payload)
-		if not decoded then return false, err end
-		return true
-	end
- 
-	function api:GetActiveCount()
-		local decoded, err = apiRequest("GET", "/presence/count")
-		if not decoded then return nil, err end
-		return decoded.Count or 0
-	end
- 
-	function api:GetLeaderboard(limit)
-		local decoded, err = apiRequest("GET", "/presence/leaderboard?limit=" .. tostring(limit or 10))
-		if not decoded then return nil, err end
-		return decoded.Items or {}
 	end
  
 	return api

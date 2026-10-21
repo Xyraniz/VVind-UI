@@ -567,24 +567,7 @@ Tab:AddSystemInfoGrid({
     Columns = 2,
 })
 
-Tab:AddActiveUsersGrid({
-    Service = Cloud,
-    Title = "Active Users",
-    Description = "Users online right now",
-    Interval = 30,
-})
-
-Tab:AddLeaderboard({
-    Service = Cloud,
-    Title = "Leaderboard",
-    Description = "Most active users",
-    Interval = 30,
-    Limit = 10,
-    RevealByDefault = false,
-})
 ```
-
-`ActiveUsersGrid` and `Leaderboard` require a configured cloud service.
 
 #### Console
 
@@ -894,13 +877,13 @@ local GlobalChat = Window:AddGlobalChatPanel({
 ```
 
 Both panels require a backend compatible with the `CloudService` request contract.
+Global chat sends message text without the local Roblox user ID. `AnonymousByDefault` only controls whether the sender's avatar appears in the local echo.
 
 ## Cloud service
 
 ```lua
 local Cloud = VindUI:CloudService({
     BaseUrl = "https://api.example.com",
-    Script = "my-script",
 })
 ```
 
@@ -913,12 +896,9 @@ local Cloud = VindUI:CloudService({
 | `Delete(id)` | Deletes a publication owned by this device. |
 | `Like(id)` | Registers or toggles a like. |
 | `Download(id)` | Downloads a configuration. |
-| `SendChatMessage(userId, text)` | Sends a global chat message. |
+| `SendChatMessage(text)` | Sends a global chat message without a client user ID. |
 | `PollChatMessages(sinceId)` | Fetches newer chat messages. |
 | `ReportChatMessage(messageId)` | Reports a chat message. |
-| `Heartbeat(payload)` | Updates the current user's presence. |
-| `GetActiveCount()` | Returns the active user count. |
-| `GetLeaderboard(limit)` | Returns the activity leaderboard. |
 
 ```lua
 local items, nextCursorOrError = Cloud:List({
@@ -936,7 +916,7 @@ end
 ```
 
 `CloudService` is a client integration, not a ready-made server. Your backend must implement the routes expected by the library.
-Requests include the `X-VVindUI-Identity` and `X-VVindUI-Script` headers. Deletes also include `X-VVindUI-Owner-Token`.
+The client does not send a persistent user ID, script identifier, chat user ID, or automatic presence heartbeats. Deleting a published config sends its per-config `X-VVindUI-Owner-Token`. Routes such as `ListMine()` need authentication handled by your backend.
 
 ## AI assistant
 
@@ -1062,7 +1042,7 @@ The runtime must provide filesystem access. Check the error returned by `SaveCon
 
 `BridgeUrl` must point to a live, compatible bridge. Responses such as `400`, `401`, or `403` usually indicate invalid authentication, an incorrect endpoint, or a service-side restriction.
 
-### Cloud, leaderboard, or global chat is empty
+### Cloud or global chat is empty
 
 These components do not generate data on their own. Configure a `CloudService` backed by a server that implements the expected routes.
 
