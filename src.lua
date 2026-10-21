@@ -12104,7 +12104,7 @@ function Tab:AddKeybind(opts)
 	modeButton.Text = modeNames[mode]
 	modeButton.TextColor3 = VVindUI.Theme.TextDim
 	modeButton.TextSize = 10
-	modeButton.FontFace = VVindUI.Theme.FontSemibold
+	modeButton.FontFace = VVindUI.Theme.Font
 	modeButton.ZIndex = Z.Content + 4
 	modeButton.Parent = pill
 	Corner(modeButton, 5)
