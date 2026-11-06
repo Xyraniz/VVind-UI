@@ -5,7 +5,7 @@ A fork of VVind UI.
 A polished Luau interface library for Roblox with resizable windows, tabs, form controls, notifications, local configurations, data views, dock buttons, and optional service panels.
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2.10.0-7c5cff?style=for-the-badge">
+  <img alt="Version" src="https://img.shields.io/badge/version-2.11.0-7c5cff?style=for-the-badge">
   <img alt="Language" src="https://img.shields.io/badge/Luau-Roblox-00A2FF?style=for-the-badge&logo=roblox">
   <img alt="Library" src="https://img.shields.io/badge/UI-Vind%20Ui%20Reborn-24c76a?style=for-the-badge">
 </p>
@@ -28,6 +28,7 @@ A polished Luau interface library for Roblox with resizable windows, tabs, form 
 - [Panels](#panels)
 - [Cloud service](#cloud-service)
 - [AI assistant](#ai-assistant)
+- [Advanced public APIs (2.11.0)](#advanced-public-apis-2110)
 - [Optional integration settings](#optional-integration-settings)
 - [Compatibility](#compatibility)
 - [Troubleshooting](#troubleshooting)
@@ -1102,6 +1103,161 @@ local success, err = VindUI:SendFeedbackWebhook(
 ```
 
 Keep webhooks behind a private backend. Anyone can copy and abuse a webhook stored in public source code.
+
+
+## Advanced public APIs (2.11.0)
+
+The following APIs are general-purpose and compatible with existing Add* controls.
+
+### Root placement
+
+VVind-UI defaults to automatic gethui/PlayerGui selection. To choose explicitly, set options before loading, use SetRootMode before creating a window, or specify RootMode on CreateWindow.
+
+~~~lua
+getgenv().__VVindUI_Options = { RootMode = "PlayerGui" }
+local UI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Xyraniz/VVind-UI/main/src.lua"))()
+local ok, reason = UI:SetRootMode("PlayerGui") -- "Auto", "PlayerGui", "Hidden"
+local window = UI:CreateWindow({ Title = "Example", RootMode = "PlayerGui" })
+~~~
+
+The requested Hidden mode requires gethui. Switching the root is rejected while windows already exist.
+
+### Stable localization keys
+
+~~~lua
+UI:RegisterLocale("en", {
+    ["example.tab"] = "Main",
+    ["example.enabled"] = "Enabled",
+    ["example.description"] = "Example setting",
+    ["example.one"] = "First choice"
+})
+UI:RegisterLocale("pt", {
+    ["example.tab"] = "Principal",
+    ["example.enabled"] = "Ativado",
+    ["example.description"] = "Configuração de exemplo",
+    ["example.one"] = "Primeira opção"
+})
+local tab = window:AddTab({ Name = "Main", NameKey = "example.tab" })
+tab:AddToggle({
+    Text = "Enabled", TextKey = "example.enabled",
+    Description = "Example setting", DescriptionKey = "example.description",
+    Flag = "enabled", Default = false
+})
+tab:AddDropdown({
+    Text = "Choice", Flag = "choice",
+    Options = {
+        { Value = "first", Label = "First choice", LabelKey = "example.one" },
+        { Value = "second", Label = "Second choice" }
+    }
+})
+UI:SetLanguage("pt")
+~~~
+
+NameKey works on tabs and subtabs, TextKey on section headings, labels, paragraphs, buttons and flagged controls, TitleKey on paragraphs/cards, and DescriptionKey on controls/cards. Custom instances can use UI:BindLocale(instance, { Text = "key" }), while controls can use UI:LocalizeControl(control, { TextKey = "...", DescriptionKey = "..." }). Dropdown values stay unchanged on translation.
+
+### Safe configuration reset
+
+~~~lua
+local defaultValue = UI:GetInitialValue("enabled")
+local ok, result = UI:ResetConfiguration({
+    ClearAutoConfig = true,     -- default true
+    ClearSavedConfigs = false,  -- default false, preserve named profiles
+    RunCallbacks = true         -- default true, synchronize consumer state
+})
+~~~
+
+Defaults are captured at flag registration before auto settings are restored. Reset rolls back setter failures, cancels pending auto-save operations, and fires OnConfigLoaded with Source = "reset". Named profiles are only deleted when explicitly requested.
+
+### Declarative controls and dependencies
+
+~~~lua
+local controls = tab:AddControls({
+    { Type = "Toggle", Text = "Feature", Flag = "feature_enabled", Default = false },
+    {
+        Type = "Slider", Text = "Speed", Flag = "feature_speed",
+        Min = 1, Max = 20, Default = 10,
+        EnabledWhen = { Flag = "feature_enabled", Equals = true }
+    }
+})
+local button = tab:AddControl({ Type = "Button", Text = "Run", Callback = function() end })
+~~~
+
+EnabledWhen can be a string flag name, a table with Flag/Equals/Not, an All or Any condition list, or a predicate receiving a flag getter. Disabled controls retain their persisted values. Existing AddToggle/AddSlider/AddDropdown/etc. methods remain supported.
+
+### Floating bubble toggles
+
+~~~lua
+local bubble = window:CreateBubbleToggle({
+    Flag = "enabled", AssetId = 123456789,
+    Color = Color3.fromRGB(113, 83, 220),
+    InactiveColor = Color3.fromRGB(35, 35, 44),
+    IconColor = Color3.fromRGB(255, 255, 255),
+    Size = 52, Position = UDim2.fromOffset(25, 210), Draggable = true
+})
+bubble:SetColor(Color3.fromRGB(90, 160, 255))
+bubble:SetImage("Lucide:shield")
+bubble:SetVisible(true)
+-- bubble:Destroy()
+~~~
+
+Both UI:CreateBubbleToggle and window:CreateBubbleToggle are available. The window method cleans up when that window is destroyed. Bubbles can bind to Flag or Control, or operate standalone using Default and Callback. Methods include Get, Set, OnChanged, SetColor, SetInactiveColor, SetImage, SetVisible, SetPosition and Destroy. They share one input/drag manager.
+
+### Event-driven keybind and state lists
+
+~~~lua
+local list = window:CreateKeybindList({
+    Title = "Active features",
+    Color = Color3.fromRGB(28, 28, 36),
+    ActiveColor = Color3.fromRGB(130, 100, 250),
+    InactiveColor = Color3.fromRGB(115, 115, 125),
+    Width = 185, Position = UDim2.fromOffset(20, 290),
+    Draggable = true, Collapsible = true,
+    Items = {
+        { Id = "feature", Flag = "enabled", Text = "Feature" },
+        { Id = "manual", Text = "Custom status", Default = false }
+    }
+})
+list:SetItemState("manual", true)
+list:AddItem({ Id = "other", Flag = "feature_enabled", Text = "Other" })
+list:RemoveItem("manual")
+~~~
+
+CreateKeybindList is an alias of CreateStateList. The components subscribe to OnChanged, OnStateChanged and config-load events instead of polling Heartbeat. SetColor, SetActiveColor, SetInactiveColor, SetPosition, SetVisible, Refresh and Destroy are supported.
+
+### Rich confirmation dialogs
+
+~~~lua
+UI:Confirm({
+    Window = window,
+    Title = "Confirm action",
+    Text = "Continue with this player?",
+    Identity = { UserId = 123456, Username = "Example", Subtitle = "Player profile" },
+    Content = function(parent)
+        local label = Instance.new("TextLabel")
+        label.BackgroundTransparency = 1
+        label.Text = "Additional details"
+        label.Size = UDim2.new(1, 0, 0, 28)
+        label.Parent = parent
+    end,
+    Callback = function(confirmed) print(confirmed) end
+})
+~~~
+
+Identity can use an Avatar asset/URL or a UserId for a Roblox thumbnail, with optional Username/Name and Subtitle. Content accepts a builder callback or an Instance (cloned), without inspecting internal dialog descendants.
+
+### Resource scopes
+
+~~~lua
+local scope = window:CreateScope()
+scope:Add(game:GetService("RunService").Heartbeat:Connect(function(dt)
+    -- Example update
+end))
+scope:Add(function() print("Cleaned up") end)
+-- scope:Destroy()
+~~~
+
+Window scopes are destroyed with the window. UI:CreateScope produces a standalone scope that survives window closure until explicitly destroyed or the library unloads. Scopes accept Roblox connections, Instances, callbacks, tasks and objects implementing Destroy, Disconnect, Remove or Cancel.
+
 
 ## Optional integration settings
 

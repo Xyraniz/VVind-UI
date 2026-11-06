@@ -15,7 +15,7 @@ local IsMobileDevice = UserInputService.TouchEnabled and not UserInputService.Mo
  
 local VVindUI = {}
 VVindUI.__index = VVindUI
-VVindUI.Version = "2.10.0"
+VVindUI.Version = "2.11.0"
 VVindUI.Flags = {}
 VVindUI.ConfigFlags = {}
 VVindUI.ConfigValidators = {}
@@ -33,6 +33,8 @@ end
  
 do
 	local globalTable = GetGlobalTable()
+	local initialRootOptions = globalTable.__VVindUI_Options
+	VVindUI.RootMode = type(initialRootOptions) == "table" and initialRootOptions.RootMode or "Auto"
 	local previousUnload = globalTable.__VVindUI_Unload or globalTable.__NullUI_Unload
 	globalTable.__VVindUI_Unload = nil
 	globalTable.__NullUI_Unload = nil
@@ -81,6 +83,75 @@ function Janitor:Destroy()
 end
  
 local LibJanitor = Janitor.new()
+
+-- Public resource scopes can own connections, Instances, Drawing objects, tasks and cleanups.
+local ResourceScope = {}
+ResourceScope.__index = ResourceScope
+local ActiveScopes = {}
+
+local function DisposeScopeItem(item, cleanup)
+	if type(cleanup) == "function" then
+		pcall(cleanup, item)
+		return
+	end
+	local kind = typeof(item)
+	if kind == "RBXScriptConnection" then
+		pcall(function() item:Disconnect() end)
+	elseif kind == "Instance" then
+		pcall(function() item:Destroy() end)
+	elseif kind == "thread" then
+		pcall(task.cancel, item)
+	elseif type(item) == "function" then
+		pcall(item)
+	elseif type(item) == "table" then
+		local dispose = item.Destroy or item.Disconnect or item.Remove or item.Cancel
+		if type(dispose) == "function" then pcall(dispose, item) end
+	end
+end
+
+function ResourceScope:Add(item, cleanup)
+	if self._destroyed then
+		DisposeScopeItem(item, cleanup)
+	else
+		table.insert(self._items, { Item = item, Cleanup = cleanup })
+	end
+	return item
+end
+
+function ResourceScope:Remove(item, dispose)
+	for i = #self._items, 1, -1 do
+		local entry = self._items[i]
+		if entry.Item == item then
+			table.remove(self._items, i)
+			if dispose then DisposeScopeItem(entry.Item, entry.Cleanup) end
+			return true
+		end
+	end
+	return false
+end
+
+function ResourceScope:Destroy()
+	if self._destroyed then return end
+	self._destroyed = true
+	ActiveScopes[self] = nil
+	for i = #self._items, 1, -1 do
+		local entry = self._items[i]
+		self._items[i] = nil
+		DisposeScopeItem(entry.Item, entry.Cleanup)
+	end
+end
+
+function VVindUI:CreateScope()
+	local scope = setmetatable({ _items = {}, _destroyed = false }, ResourceScope)
+	ActiveScopes[scope] = true
+	return scope
+end
+
+local function DestroyActiveScopes()
+	local scopes = {}
+	for scope in pairs(ActiveScopes) do table.insert(scopes, scope) end
+	for _, scope in ipairs(scopes) do scope:Destroy() end
+end
 
 local LocalizedEntries = setmetatable({}, { __mode = "k" })
 local LocaleListeners = {}
@@ -158,7 +229,7 @@ function VVindUI:_TrackLocalizedText(instance, property, key)
 		LocalizedEntries[instance] = properties
 	end
 	local translated = self:Translate(key)
-	properties[property] = { Key = key, Current = translated }
+	properties[property] = { Key = key, Current = translated, Explicit = true }
 	if translated ~= key then pcall(function() instance[property] = translated end) end
 end
 
@@ -168,6 +239,27 @@ function VVindUI:Localize(instance, key, property)
 	self:_TrackLocalizedText(instance, property, key)
 	local ok, value = pcall(function() return instance[property] end)
 	return ok and value or nil
+end
+
+function VVindUI:BindLocale(instance, properties)
+	assert(typeof(instance) == "Instance" and type(properties) == "table",
+		"BindLocale expects an Instance and a property-to-key table")
+	for property, key in pairs(properties) do
+		self:Localize(instance, key, property)
+	end
+	return instance
+end
+
+function VVindUI:LocalizeControl(control, keys)
+	assert(type(control) == "table" and typeof(control.Instance) == "Instance",
+		"LocalizeControl expects a control with an Instance")
+	keys = keys or {}
+	local card = control.Instance
+	local title = card:FindFirstChild("Title", true)
+	local description = card:FindFirstChild("Description", true)
+	if keys.TextKey and title then self:Localize(title, keys.TextKey) end
+	if keys.DescriptionKey and description then self:Localize(description, keys.DescriptionKey) end
+	return control
 end
 
 function VVindUI:GetLanguage()
@@ -187,7 +279,7 @@ function VVindUI:SetLanguage(language)
 			for property, entry in pairs(properties) do
 				local ok, current = pcall(function() return instance[property] end)
 				if ok then
-					if current ~= entry.Current then entry.Key = current end
+					if current ~= entry.Current and not entry.Explicit then entry.Key = current end
 					local translated = self:Translate(entry.Key)
 					pcall(function() instance[property] = translated end)
 					entry.Current = translated
@@ -267,10 +359,20 @@ VVindUI.register_locale_callback = VVindUI.RegisterLocaleCallback
 local function TrackLocalizedInstance(instance)
 	if not instance:IsA("TextLabel") and not instance:IsA("TextButton") and not instance:IsA("TextBox") then return end
 	local ok, text = pcall(function() return instance.Text end)
-	if ok and text ~= "" then VVindUI:_TrackLocalizedText(instance, "Text", text) end
+	local existing = LocalizedEntries[instance] and LocalizedEntries[instance].Text
+	if ok and text ~= "" and not (existing and existing.Explicit) then
+		VVindUI:_TrackLocalizedText(instance, "Text", text)
+		local entry = LocalizedEntries[instance] and LocalizedEntries[instance].Text
+		if entry then entry.Explicit = false end
+	end
 	if instance:IsA("TextBox") then
 		local placeholderOk, placeholder = pcall(function() return instance.PlaceholderText end)
-		if placeholderOk and placeholder ~= "" then VVindUI:_TrackLocalizedText(instance, "PlaceholderText", placeholder) end
+		local existing = LocalizedEntries[instance] and LocalizedEntries[instance].PlaceholderText
+		if placeholderOk and placeholder ~= "" and not (existing and existing.Explicit) then
+			VVindUI:_TrackLocalizedText(instance, "PlaceholderText", placeholder)
+			local entry = LocalizedEntries[instance] and LocalizedEntries[instance].PlaceholderText
+			if entry then entry.Explicit = false end
+		end
 	end
 end
 
@@ -1079,12 +1181,40 @@ function VVindUI:PreloadIcons(sources)
 	end
 end
  
-local function GetRoot()
-	local parent = PlayerGui
+local function ResolveRootParent(mode)
+	if mode ~= "Auto" and mode ~= "PlayerGui" and mode ~= "Hidden" then
+		return nil, "RootMode must be Auto, PlayerGui or Hidden"
+	end
+	if mode == "PlayerGui" then return PlayerGui end
 	local hidden = hasFn("gethui")
 	if hidden then
 		local ok, container = pcall(hidden)
-		if ok and container then parent = container end
+		if ok and typeof(container) == "Instance" then return container end
+	end
+	if mode == "Hidden" then return nil, "gethui is unavailable" end
+	return PlayerGui
+end
+
+function VVindUI:SetRootMode(mode)
+	local parent, err = ResolveRootParent(mode)
+	if not parent then return false, err end
+	local root = self._Root
+	if root and root.Parent ~= parent then
+		if #self._Windows > 0 then return false, "cannot change RootMode while windows exist" end
+		local conflict = parent:FindFirstChild("VVindUI")
+		if conflict and conflict ~= root then conflict:Destroy() end
+		root.Parent = parent
+	end
+	self.RootMode = mode
+	return true
+end
+
+local function GetRoot()
+	local parent, err = ResolveRootParent(VVindUI.RootMode)
+	if not parent then
+		warn("[VindUI] " .. tostring(err) .. "; using PlayerGui")
+		parent = PlayerGui
+		VVindUI.RootMode = "PlayerGui"
 	end
  
 	local stale = parent:FindFirstChild("VVindUI")
@@ -1750,10 +1880,93 @@ function VVindUI:Confirm(opts)
 		textLabel.Parent = dialog
 	end
  
+
+	local identity = opts.Identity
+	if identity == nil and (opts.Avatar ~= nil or opts.Username ~= nil or opts.UserId ~= nil) then
+		identity = { Avatar = opts.Avatar, Username = opts.Username, UserId = opts.UserId, Subtitle = opts.Subtitle }
+	end
+	local contentOrder = 3
+	if type(identity) == "table" then
+		local identityRow = Instance.new("Frame")
+		identityRow.Name = "Identity"
+		identityRow.BackgroundTransparency = 1
+		identityRow.Size = UDim2.new(1, 0, 0, 56)
+		identityRow.LayoutOrder = contentOrder
+		identityRow.ZIndex = Z.ModalTop + 1
+		identityRow.Parent = dialog
+		contentOrder += 1
+		local portrait = Instance.new("ImageLabel")
+		portrait.Name = "Avatar"
+		portrait.BackgroundTransparency = 1
+		portrait.Size = UDim2.fromOffset(50, 50)
+		portrait.Position = UDim2.fromOffset(0, 3)
+		portrait.ZIndex = Z.ModalTop + 2
+		portrait.Parent = identityRow
+		Corner(portrait, 25)
+		local avatar = identity.Avatar
+		if type(avatar) == "number" or (type(avatar) == "string" and avatar:match("^%d+$")) then
+			avatar = "rbxassetid://" .. tostring(avatar)
+		end
+		if type(avatar) == "string" then portrait.Image = avatar end
+		if not avatar and tonumber(identity.UserId) then
+			local userId = tonumber(identity.UserId)
+			task.spawn(function()
+				local ok, image = pcall(function()
+					return Players:GetUserThumbnailAsync(userId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size100x100)
+				end)
+				if ok and portrait.Parent then portrait.Image = image end
+			end)
+		end
+		local username = Instance.new("TextLabel")
+		username.Name = "Username"
+		username.BackgroundTransparency = 1
+		username.FontFace = VVindUI.Theme.Font
+		username.Text = tostring(identity.Username or identity.Name or ("User " .. tostring(identity.UserId or "")))
+		username.TextColor3 = VVindUI.Theme.Text
+		username.TextSize = 14
+		username.TextTruncate = Enum.TextTruncate.AtEnd
+		username.TextXAlignment = Enum.TextXAlignment.Left
+		username.Position = UDim2.fromOffset(62, 4)
+		username.Size = UDim2.new(1, -62, 0, 22)
+		username.ZIndex = Z.ModalTop + 2
+		username.Parent = identityRow
+		local subtitle = Instance.new("TextLabel")
+		subtitle.Name = "Subtitle"
+		subtitle.BackgroundTransparency = 1
+		subtitle.FontFace = VVindUI.Theme.FontRegular
+		subtitle.Text = tostring(identity.Subtitle or "")
+		subtitle.TextColor3 = VVindUI.Theme.TextDim
+		subtitle.TextSize = 12
+		subtitle.TextTruncate = Enum.TextTruncate.AtEnd
+		subtitle.TextXAlignment = Enum.TextXAlignment.Left
+		subtitle.Position = UDim2.fromOffset(62, 27)
+		subtitle.Size = UDim2.new(1, -62, 0, 19)
+		subtitle.ZIndex = Z.ModalTop + 2
+		subtitle.Parent = identityRow
+	end
+	local contentHolder
+	if opts.Content ~= nil then
+		contentHolder = Instance.new("Frame")
+		contentHolder.Name = "CustomContent"
+		contentHolder.BackgroundTransparency = 1
+		contentHolder.AutomaticSize = Enum.AutomaticSize.Y
+		contentHolder.Size = UDim2.new(1, 0, 0, 0)
+		contentHolder.LayoutOrder = contentOrder
+		contentHolder.ZIndex = Z.ModalTop + 1
+		contentHolder.Parent = dialog
+		if type(opts.Content) == "function" then
+			local ok, err = pcall(opts.Content, contentHolder)
+			if not ok then warn("[VindUI] Confirm content error: " .. tostring(err)) end
+		elseif typeof(opts.Content) == "Instance" then
+			opts.Content:Clone().Parent = contentHolder
+		end
+		contentOrder += 1
+	end
+
 	local buttonsRow = Instance.new("Frame")
 	buttonsRow.BackgroundTransparency = 1
 	buttonsRow.Size = UDim2.new(1, 0, 0, 38)
-	buttonsRow.LayoutOrder = 3
+	buttonsRow.LayoutOrder = contentOrder
 	buttonsRow.ZIndex = Z.ModalTop + 1
 	buttonsRow.Parent = dialog
  
@@ -1851,7 +2064,7 @@ function VVindUI:Confirm(opts)
 	if textLabel then Tween(textLabel, { TextTransparency = 0 }, 0.2) end
 	Tween(scale, { Scale = 1 }, 0.24, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
  
-	return { Close = close }
+	return { Close = close, Instance = dialog, ContentContainer = contentHolder }
 end
  
 function VVindUI:Modal(opts)
@@ -2450,7 +2663,7 @@ local function AddTitleDesc(card, x, rightReserve, title, description, baseHeigh
 		local avail = math.max(cardW - x - reserve, 1)
 		local realDescH = descH
 		if hasDesc then
-			local _, h = MeasureText(description, 12, avail)
+			local _, h = MeasureText(descLabel.Text, 12, avail)
 			realDescH = math.max(descH, h)
 			descLabel.Size = UDim2.new(1, -(x + (type(rightReserve) == "function" and rightReserve() or rightReserve)), 0, realDescH)
 		end
@@ -2467,6 +2680,12 @@ local function AddTitleDesc(card, x, rightReserve, title, description, baseHeigh
 	end
  
 	card:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
+	if descLabel then
+		descLabel:GetPropertyChangedSignal("Text"):Connect(function()
+			lastWidth = -1
+			relayout()
+		end)
+	end
 	task.defer(relayout)
  
 	return titleLabel, descLabel, relayout
@@ -2537,6 +2756,10 @@ local NextWindowId = 0
  
 function VVindUI:CreateWindow(opts)
 	opts = opts or {}
+	if opts.RootMode ~= nil then
+		local ok, err = self:SetRootMode(opts.RootMode)
+		if not ok then error(err, 2) end
+	end
 	if self.SetConfigFolder then self:SetConfigFolder(opts.Folder) end
 	if self.LoadAutoConfig then self:LoadAutoConfig() end
 	local size = opts.Size or UDim2.fromOffset(605, 405)
@@ -3000,6 +3223,12 @@ end
  
 function Window:IsOpen()
 	return self._state == "open"
+end
+
+function Window:CreateScope()
+	local scope = VVindUI:CreateScope()
+	self:OnDestroy(function() scope:Destroy() end)
+	return scope
 end
 
 local function FireWindowDestroyCallbacks(window)
@@ -7221,6 +7450,7 @@ function Window:AddTab(nameOrOpts)
 	textLabel.LayoutOrder = 2
 	textLabel.ZIndex = Z.Content + 1
 	textLabel.Parent = row
+	if opts.NameKey or opts.TitleKey then VVindUI:Localize(textLabel, opts.NameKey or opts.TitleKey) end
  
 	local pageGroup = Instance.new("CanvasGroup")
 	pageGroup.Name = name .. "Group"
@@ -8366,6 +8596,7 @@ function Tab:AddSubTab(nameOrOpts)
 	lbl.LayoutOrder = 2
 	lbl.ZIndex = Z.Content + 1
 	lbl.Parent = btn
+	if opts.NameKey then VVindUI:Localize(lbl, opts.NameKey) end
  
 	local group = Instance.new("Frame")
 	group.Name = title .. "Group"
@@ -8607,6 +8838,119 @@ local function ValidateConfigFlag(api, value)
 	return true, value
 end
 
+
+local function CopyInitialFlagValue(value, seen)
+	if type(value) ~= "table" then return value end
+	seen = seen or {}
+	if seen[value] then return seen[value] end
+	local copy = {}
+	seen[value] = copy
+	for key, item in pairs(value) do
+		copy[CopyInitialFlagValue(key, seen)] = CopyInitialFlagValue(item, seen)
+	end
+	return copy
+end
+
+local EnabledBindings = {}
+local function ResolveEnabledCondition(spec)
+	if type(spec) == "function" then
+		local ok, result = pcall(spec, function(flag)
+			local api = VVindUI.Flags[flag]
+			return api and api.Get and api:Get() or nil
+		end)
+		return ok and not not result
+	end
+	if type(spec) == "string" then spec = { Flag = spec } end
+	if type(spec) ~= "table" then return false end
+	if type(spec.All) == "table" then
+		for _, item in ipairs(spec.All) do
+			if not ResolveEnabledCondition(item) then return false end
+		end
+		return true
+	end
+	if type(spec.Any) == "table" then
+		for _, item in ipairs(spec.Any) do
+			if ResolveEnabledCondition(item) then return true end
+		end
+		return false
+	end
+	local api = VVindUI.Flags[spec.Flag]
+	local ok, current = false, nil
+	if api and type(api.Get) == "function" then
+		ok, current = pcall(api.Get, api)
+	end
+	local matched = false
+	if ok then
+		if spec.Equals ~= nil then
+			matched = current == spec.Equals
+		else
+			matched = not not current
+		end
+	end
+	if spec.Not then return not matched end
+	return matched
+end
+
+function VVindUI:RefreshEnabledConditions()
+	for control, binding in pairs(EnabledBindings) do
+		if control._VVindDependencyDestroyed then
+			EnabledBindings[control] = nil
+		else
+			local enabled = ResolveEnabledCondition(binding.Condition)
+			if enabled ~= binding.Enabled then
+				binding.Enabled = enabled
+				if type(control.SetLocked) == "function" then
+					control:SetLocked(not enabled)
+				else
+					binding.Guard.Visible = not enabled
+				end
+				if type(binding.OnChanged) == "function" then
+					task.spawn(binding.OnChanged, enabled)
+				end
+			end
+		end
+	end
+end
+
+function VVindUI:BindEnabledWhen(control, condition, onChanged)
+	assert(type(control) == "table" and typeof(control.Instance) == "Instance",
+		"BindEnabledWhen expects a UI control with an Instance")
+	assert(type(condition) == "string" or type(condition) == "table" or type(condition) == "function",
+		"EnabledWhen expects a flag, condition table or function")
+	local oldBinding = EnabledBindings[control]
+	if oldBinding then
+		if oldBinding.Connection then oldBinding.Connection:Disconnect() end
+		oldBinding.Guard:Destroy()
+	end
+	local guard = Instance.new("TextButton")
+	guard.Name = "VVindDisabledGuard"
+	guard.Text = ""
+	guard.AutoButtonColor = false
+	guard.BackgroundColor3 = VVindUI.Theme.Background
+	guard.BackgroundTransparency = 0.87
+	guard.BorderSizePixel = 0
+	guard.Size = UDim2.fromScale(1, 1)
+	guard.ZIndex = 100
+	guard.Visible = false
+	guard.Parent = control.Instance
+	local guardConnection = control.Instance.Destroying:Connect(function()
+		EnabledBindings[control] = nil
+	end)
+	EnabledBindings[control] = {
+		Condition = condition, Guard = guard, OnChanged = onChanged, Connection = guardConnection
+	}
+	local originalDestroy = control.Destroy
+	control.Destroy = function(self, ...)
+		self._VVindDependencyDestroyed = true
+		EnabledBindings[self] = nil
+		guardConnection:Disconnect()
+		guard:Destroy()
+		if originalDestroy then return originalDestroy(self, ...) end
+	end
+	self:RefreshEnabledConditions()
+	return control
+end
+
 local function RegisterFlag(opts, api, kind, validator)
 	if opts.Flag ~= nil then
 		local flag = opts.Flag
@@ -8627,6 +8971,14 @@ local function RegisterFlag(opts, api, kind, validator)
 		end
 		api.Flag = flag
 		api.Kind = kind
+		local initialGetter = kind == "Keybind" and api.GetState or api.Get
+		if type(initialGetter) == "function" then
+			local initialOk, initialValue = pcall(initialGetter, api)
+			if initialOk then
+				api._HasInitialValue = true
+				api._InitialValue = CopyInitialFlagValue(initialValue)
+			end
+		end
 		api.Label = opts.Text or opts.Label or flag
 		if kind ~= "Keybind" and type(opts.Callback) == "function" then
 			VVindUI._NextControlRegistration += 1
@@ -8640,6 +8992,7 @@ local function RegisterFlag(opts, api, kind, validator)
 		local configChangeHook = api.OnStateChanged or api.OnChanged
 		if type(configChangeHook) == "function" then
 			local ok, connection = pcall(configChangeHook, api, function()
+				VVindUI:RefreshEnabledConditions()
 				if not VVindUI._ApplyingConfig and VVindUI.QueueAutoConfigSave then
 					VVindUI:QueueAutoConfigSave(flag)
 				end
@@ -8661,6 +9014,14 @@ local function RegisterFlag(opts, api, kind, validator)
 			end
 		end
 		if VVindUI.ApplyAutoConfigFlag then VVindUI:ApplyAutoConfigFlag(flag) end
+		if opts.TextKey or opts.DescriptionKey then
+			VVindUI:LocalizeControl(api, opts)
+		end
+		if opts.EnabledWhen then
+			VVindUI:BindEnabledWhen(api, opts.EnabledWhen, opts.OnEnabledChanged)
+		end
+		VVindUI:RefreshEnabledConditions()
+		if VVindUI._RefreshFloatingBindings then VVindUI:_RefreshFloatingBindings() end
 	end
 	return api
 end
@@ -8680,6 +9041,7 @@ function Tab:AddLabel(textOrOptions)
 	label.Size = UDim2.new(1, 0, 0, 16)
 	label.ZIndex = Z.Content
 	label.Parent = self._page
+	if opts.TextKey then VVindUI:Localize(label, opts.TextKey) end
 	if typeof(opts.Color) == "Color3" then label:SetAttribute("VVindThemeColorExempt", true) end
 	local function set(value)
 		if type(value) == "table" then
@@ -8776,6 +9138,7 @@ function Tab:AddSection(textOrOpts, maybeIcon)
 	label.Size = UDim2.new(1, -(x + 2), 0, 14)
 	label.ZIndex = Z.Content + 2
 	label.Parent = header
+	if opts.TextKey then VVindUI:Localize(label, opts.TextKey) end
 
 	local collapseIcon
 	if opts.Collapsible then
@@ -9087,6 +9450,8 @@ function Tab:AddParagraph(opts)
 	textLabel.LayoutOrder = 2
 	textLabel.ZIndex = Z.Content + 1
 	textLabel.Parent = card
+	if opts.TitleKey and titleLabel then VVindUI:Localize(titleLabel, opts.TitleKey) end
+	if opts.TextKey then VVindUI:Localize(textLabel, opts.TextKey) end
 	if typeof(opts.Color) == "Color3" then textLabel:SetAttribute("VVindThemeColorExempt", true) end
 
 	local function update(value)
@@ -9630,10 +9995,13 @@ function Tab:AddButton(opts)
 		if opts.Callback then task.spawn(opts.Callback) end
 	end)
  
-	return {
+	local result = {
 		Instance = card,
 		Destroy = function() card:Destroy() end,
 	}
+	if opts.TextKey or opts.DescriptionKey then VVindUI:LocalizeControl(result, opts) end
+	if opts.EnabledWhen then VVindUI:BindEnabledWhen(result, opts.EnabledWhen, opts.OnEnabledChanged) end
+	return result
 end
  
 function Tab:AddCard(opts)
@@ -9832,6 +10200,7 @@ function Tab:AddCard(opts)
 			ratingLabel.LayoutOrder = 1
 			ratingLabel.ZIndex = Z.Content + 1
 			ratingLabel.Parent = ratingBody
+			if ratingOpts.TitleKey then VVindUI:Localize(ratingLabel, ratingOpts.TitleKey) end
 		end
  
 		local starBar = BuildStarRow(ratingBody, 2, math.max(1, ratingOpts.MaxStars or 5),
@@ -9866,11 +10235,16 @@ function Tab:AddCard(opts)
 		}
 	end
  
-	return {
+	local result = {
 		Instance = card,
 		Rating = ratingBar,
 		Destroy = function() card:Destroy() end,
 	}
+	if opts.TitleKey or opts.DescriptionKey then
+		VVindUI:LocalizeControl(result, { TextKey = opts.TitleKey, DescriptionKey = opts.DescriptionKey })
+	end
+	if opts.EnabledWhen then VVindUI:BindEnabledWhen(result, opts.EnabledWhen, opts.OnEnabledChanged) end
+	return result
 end
  
 local CHANGELOG_TYPES = {
@@ -10937,11 +11311,14 @@ function Tab:AddDropdown(opts)
 			assert(type(value) == "string" or type(value) == "number", "Dropdown option Value must be a string or number")
 			assert(not seen[value], "Dropdown option values must be unique")
 			seen[value] = true
+			local key = type(option) == "table" and option.LabelKey
+			if type(key) == "string" then label = VVindUI:Translate(key) end
 			table.insert(normalized, { Value = value, Label = tostring(label ~= nil and label or value), Index = index })
 		end
 		return normalized
 	end
-	local options = normalizeOptions(opts.Options or {})
+	local rawOptions = opts.Options or {}
+	local options = normalizeOptions(rawOptions)
 	local isMulti = opts.MultiSelect == true
 	local hasDesc = opts.Description and opts.Description ~= ""
 	local height = hasDesc and 56 or 44
@@ -11327,7 +11704,8 @@ function Tab:AddDropdown(opts)
 	end
 	local function setOptions(newOptions)
 		local before = cloneSelection()
-		options = normalizeOptions(newOptions or {})
+		rawOptions = newOptions or {}
+		options = normalizeOptions(rawOptions)
 		if isMulti then
 			local filtered = {}
 			for value, enabled in pairs(before) do if enabled and hasOption(value) then filtered[value] = true end end
@@ -11341,6 +11719,9 @@ function Tab:AddDropdown(opts)
 		if not selectionEquals(before, after) then fireChanged(isMulti and getSelectedList() or selected, "code") end
 	end
 
+	local localeConnection = VVindUI:RegisterLocaleCallback(function()
+		if card.Parent then setOptions(rawOptions) end
+	end)
 	return RegisterFlag(opts, {
 		Instance = card,
 		Set = function(_, v, silent)
@@ -11369,7 +11750,12 @@ function Tab:AddDropdown(opts)
 			if newOptions ~= nil then setOptions(newOptions) end
 		end,
 		OnChanged = function(_, fn) return signal.Connect(fn) end,
-		Destroy = function() closePopup(); signal.Clear(); card:Destroy() end,
+		Destroy = function()
+			localeConnection:Disconnect()
+			closePopup()
+			signal.Clear()
+			card:Destroy()
+		end,
 	}, "Dropdown", function(v)
 		if isMulti then
 			if type(v) ~= "table" then return false, nil, "expected a selection list" end
@@ -14352,6 +14738,8 @@ function VVindUI:SetConfig(data, silent)
 		Migrations = prepared.Migrations,
 		Values = self:GetValues(),
 	})
+	self:RefreshEnabledConditions()
+	if self._RefreshFloatingBindings then self:_RefreshFloatingBindings() end
 	return true, prepared.Migrations
 end
 
@@ -14399,6 +14787,8 @@ function VVindUI:SetUIElementValue(flag, value, silent)
 	end
 	local ok, err = pcall(api.Set, api, value, silent ~= false)
 	if not ok then return false, tostring(err) end
+	self:RefreshEnabledConditions()
+	if self._RefreshFloatingBindings then self:_RefreshFloatingBindings() end
 	return true
 end
 
@@ -14817,7 +15207,9 @@ end
 function VVindUI:QueueAutoConfigSave()
 	if self._AutoConfigSaveScheduled then return end
 	self._AutoConfigSaveScheduled = true
+	local generation = self._AutoConfigSaveGeneration or 0
 	local function save()
+		if generation ~= (self._AutoConfigSaveGeneration or 0) then return end
 		self._AutoConfigSaveScheduled = false
 		if not self._ApplyingConfig then
 			local ok, err = self:SaveAutoConfig()
@@ -14825,6 +15217,108 @@ function VVindUI:QueueAutoConfigSave()
 		end
 	end
 	if task and type(task.defer) == "function" then task.defer(save) else save() end
+end
+
+
+function VVindUI:GetInitialValue(flag)
+	local api = self.Flags[flag]
+	if not api or not api._HasInitialValue then return nil, "default unavailable for " .. tostring(flag) end
+	return CopyInitialFlagValue(api._InitialValue)
+end
+
+-- Restores registered flags without mutating private helpers or replacing save methods.
+-- By default only the automatic settings file is deleted; named profiles are retained.
+function VVindUI:ResetConfiguration(opts)
+	opts = opts or {}
+	local clearAuto = opts.ClearAutoConfig ~= false
+	local clearNamed = opts.ClearSavedConfigs == true
+	local runCallbacks = opts.RunCallbacks ~= false
+	if clearAuto and not fn_delfile and fn_isfile then
+		local ok, exists = pcall(fn_isfile, AutoConfigPath())
+		if ok and exists then return false, "delfile is unavailable" end
+	end
+	local ordered, snapshots = {}, {}
+	for flag, api in pairs(self.Flags) do
+		if api._HasInitialValue then
+			local ok, oldValue = pcall(ReadControlValue, api)
+			if not ok then return false, flag .. ": could not read value: " .. tostring(oldValue) end
+			table.insert(ordered, { Flag = flag, Api = api })
+			snapshots[flag] = CopyInitialFlagValue(oldValue)
+		end
+	end
+	table.sort(ordered, function(a, b)
+		local at, bt = a.Api.Kind == "Toggle", b.Api.Kind == "Toggle"
+		if at ~= bt then return not at end
+		return a.Flag < b.Flag
+	end)
+	local oldApplying, oldAuto = self._ApplyingConfig, self._ApplyingAutoConfig
+	self._ApplyingConfig = true
+	self._ApplyingAutoConfig = true
+	local errors = {}
+	for _, entry in ipairs(ordered) do
+		local ok, err = pcall(entry.Api.Set, entry.Api, CopyInitialFlagValue(entry.Api._InitialValue), true)
+		if not ok then
+			table.insert(errors, entry.Flag .. ": " .. tostring(err))
+			break
+		end
+	end
+	if #errors > 0 then
+		for _, entry in ipairs(ordered) do
+			pcall(entry.Api.Set, entry.Api, CopyInitialFlagValue(snapshots[entry.Flag]), true)
+		end
+		self._ApplyingAutoConfig, self._ApplyingConfig = oldAuto, oldApplying
+		self:RefreshEnabledConditions()
+		return false, table.concat(errors, "; ")
+	end
+	self._AutoConfigSaveGeneration = (self._AutoConfigSaveGeneration or 0) + 1
+	self._AutoConfigSaveScheduled = false
+	self._AutoConfigLoadGeneration = (self._AutoConfigLoadGeneration or 0) + 1
+	self._AutoConfigPending = {}
+	self._AutoConfigApplied = {}
+	self._AutoConfigCheckedPath = AutoConfigPath()
+	if runCallbacks then
+		for _, entry in ipairs(ordered) do
+			local cb = entry.Api._InitializationCallback
+			if type(cb) == "function" then
+				local info = { Source = "reset", Action = "reset" }
+				local value = CopyInitialFlagValue(entry.Api._InitialValue)
+				local ok, err
+				if entry.Api.Kind == "Textbox" then
+					ok, err = pcall(cb, value, false, info)
+				else
+					ok, err = pcall(cb, value, info)
+				end
+				if not ok then table.insert(errors, entry.Flag .. " callback: " .. tostring(err)) end
+			end
+		end
+	end
+	if clearAuto and fn_isfile and fn_delfile then
+		local path = AutoConfigPath()
+		local ok, exists = pcall(fn_isfile, path)
+		if ok and exists then
+			local deleted, err = pcall(fn_delfile, path)
+			if not deleted or err == false then
+				table.insert(errors, "auto config: " .. tostring(err))
+			end
+		end
+	end
+	if clearNamed then
+		local configs, listErr = self:ListConfigs()
+		if listErr then table.insert(errors, tostring(listErr)) end
+		for _, item in ipairs(configs) do
+			local ok, err = self:DeleteConfig(item.FileName)
+			if not ok then table.insert(errors, tostring(item.FileName) .. ": " .. tostring(err)) end
+		end
+	end
+	self._ApplyingAutoConfig, self._ApplyingConfig = oldAuto, oldApplying
+	self:RefreshEnabledConditions()
+	if self._RefreshFloatingBindings then self:_RefreshFloatingBindings() end
+	if not clearAuto then
+		local saved, err = self:SaveAutoConfig()
+		if not saved then table.insert(errors, "save defaults: " .. tostring(err)) end
+	end
+	ConfigLoadedSignal.Fire({ Source = "reset", Silent = true, Values = self:GetValues() })
+	return #errors == 0, #errors == 0 and #ordered or table.concat(errors, "; ")
 end
 
 VVindUI.get_config = VVindUI.GetConfigJSON
@@ -15257,6 +15751,501 @@ function VVindUI:CreateAIAssistant(opts)
 	return assistant
 end
  
+
+-- Shared drag controller for detachable bubbles and state panels.
+local FloatingWidgetRegistry = {}
+local ActiveFloatingDrag = nil
+local function FloatingColor(value, fallback)
+	return typeof(value) == "Color3" and value or fallback
+end
+local function FloatingImage(value)
+	if type(value) == "number" then return "rbxassetid://" .. tostring(value) end
+	if type(value) == "string" and value:match("^%d+$") then return "rbxassetid://" .. value end
+	if type(value) == "string" then return ResolveIcon(value) end
+	return ""
+end
+local function RegisterFloatingDrag(handle, frame, onTap, draggable, scope)
+	handle.Active = true
+	scope:Add(handle.InputBegan:Connect(function(input)
+		if ActiveFloatingDrag then return end
+		if input.UserInputType ~= Enum.UserInputType.MouseButton1
+			and input.UserInputType ~= Enum.UserInputType.Touch then return end
+		local root = VVindUI._Root
+		local scale = GetUIScale()
+		local pos = (frame.AbsolutePosition - root.AbsolutePosition) / scale
+		ActiveFloatingDrag = {
+			Input = input,
+			Frame = frame,
+			Start = Vector2.new(input.Position.X, input.Position.Y),
+			Position = pos,
+			Moved = false,
+			Draggable = draggable ~= false,
+			OnTap = onTap,
+		}
+	end))
+	scope:Add(function()
+		if ActiveFloatingDrag and ActiveFloatingDrag.Frame == frame then ActiveFloatingDrag = nil end
+	end)
+end
+
+LibJanitor:Add(UserInputService.InputChanged:Connect(function(input)
+	local drag = ActiveFloatingDrag
+	if not drag or not drag.Draggable then return end
+	local mouse = drag.Input.UserInputType == Enum.UserInputType.MouseButton1
+	if (mouse and input.UserInputType ~= Enum.UserInputType.MouseMovement)
+		or (not mouse and input ~= drag.Input) then return end
+	local delta = Vector2.new(input.Position.X, input.Position.Y) - drag.Start
+	if delta.Magnitude < 6 and not drag.Moved then return end
+	drag.Moved = true
+	local scale = GetUIScale()
+	local root = VVindUI._Root
+	local maxX = math.max(0, root.AbsoluteSize.X / scale - drag.Frame.AbsoluteSize.X / scale)
+	local maxY = math.max(0, root.AbsoluteSize.Y / scale - drag.Frame.AbsoluteSize.Y / scale)
+	local position = drag.Position + delta / scale
+	drag.Frame.Position = UDim2.fromOffset(
+		math.clamp(position.X, 0, maxX),
+		math.clamp(position.Y, 0, maxY)
+	)
+end))
+LibJanitor:Add(UserInputService.InputEnded:Connect(function(input)
+	local drag = ActiveFloatingDrag
+	if not drag then return end
+	local mouse = drag.Input.UserInputType == Enum.UserInputType.MouseButton1
+	if not (mouse and input.UserInputType == Enum.UserInputType.MouseButton1)
+		and not (not mouse and input == drag.Input) then return end
+	ActiveFloatingDrag = nil
+	if not drag.Moved and drag.Frame.Parent and drag.OnTap then drag.OnTap() end
+end))
+
+local function FloatingScope(opts)
+	local scope = VVindUI:CreateScope()
+	if opts.Window then
+		assert(type(opts.Window.OnDestroy) == "function", "Window must be a VVindUI window")
+		scope:Add(opts.Window:OnDestroy(function() scope:Destroy() end))
+	end
+	return scope
+end
+
+function VVindUI:_RefreshFloatingBindings()
+	for widget in pairs(FloatingWidgetRegistry) do
+		if not widget._Destroyed and type(widget.Refresh) == "function" then widget:Refresh() end
+	end
+end
+
+-- CreateBubbleToggle({ Flag = "MyToggle", Icon = "shield", Color = Color3.fromRGB(...),
+--    Position = UDim2.fromOffset(30, 230), Size = 50, Draggable = true })
+function VVindUI:CreateBubbleToggle(opts)
+	opts = opts or {}
+	local scope = FloatingScope(opts)
+	local size = math.clamp(tonumber(opts.Size) or 52, 28, 120)
+	local color = FloatingColor(opts.Color, self.Theme.Accent)
+	local inactive = FloatingColor(opts.InactiveColor, self.Theme.Surface)
+	local state = opts.Default == true
+	local bubble = Instance.new("TextButton")
+	bubble.Name = opts.Name or "VVindBubble"
+	bubble.Text = ""
+	bubble.AutoButtonColor = false
+	bubble.BackgroundColor3 = state and color or inactive
+	bubble.BorderSizePixel = 0
+	bubble.Size = UDim2.fromOffset(size, size)
+	bubble.Position = typeof(opts.Position) == "UDim2" and opts.Position or UDim2.fromOffset(20, 190)
+	bubble.ZIndex = 500
+	bubble.Parent = self._Root
+	Corner(bubble, size / 2)
+	local stroke = Stroke(bubble, color, 2, 0.25)
+	local icon = Instance.new("ImageLabel")
+	icon.Name = "Icon"
+	icon.BackgroundTransparency = 1
+	icon.Image = FloatingImage(opts.Image or opts.AssetId or opts.Icon)
+	icon.ImageColor3 = FloatingColor(opts.IconColor, Color3.new(1, 1, 1))
+	icon.AnchorPoint = Vector2.new(0.5, 0.5)
+	icon.Position = UDim2.fromScale(0.5, 0.5)
+	icon.Size = UDim2.fromOffset(math.floor(size * 0.52), math.floor(size * 0.52))
+	icon.ZIndex = bubble.ZIndex + 1
+	icon.Parent = bubble
+	scope:Add(bubble)
+	local signal = MakeSignal()
+	scope:Add(function() signal.Clear() end)
+	local widget = {
+		Instance = bubble,
+		Icon = icon,
+		Scope = scope,
+		_Destroyed = false,
+	}
+	local source, sourceConnection
+	local function resolveSource()
+		local candidate = opts.Control or (opts.Flag and VVindUI.Flags[opts.Flag])
+		if candidate ~= source then
+			if sourceConnection then sourceConnection:Disconnect(); sourceConnection = nil end
+			source = candidate
+			if source then
+				local onChange = source.OnStateChanged or source.OnChanged
+				if type(onChange) == "function" then
+					sourceConnection = onChange(source, function() widget:Refresh() end)
+				end
+			end
+		end
+		return source
+	end
+	local function render()
+		bubble.BackgroundColor3 = state and color or inactive
+		stroke.Color = color
+		stroke.Transparency = state and 0.1 or 0.68
+	end
+	function widget:Refresh()
+		if self._Destroyed then return end
+		local api = resolveSource()
+		if api and type(api.Get) == "function" then
+			local ok, value = pcall(api.Get, api)
+			if ok and type(value) == "boolean" then
+				local changed = state ~= value
+				state = value
+				render()
+				if changed then signal.Fire(state, "flag") end
+			end
+		else
+			render()
+		end
+	end
+	function widget:Get() return state end
+	function widget:Set(value)
+		if self._Destroyed then return false, "bubble destroyed" end
+		value = value == true
+		local api = resolveSource()
+		if api and type(api.Set) == "function" then
+			local previous = state
+			local ok, err = pcall(api.Set, api, value, false)
+			if not ok then return false, tostring(err) end
+			self:Refresh()
+			if state ~= previous and opts.Callback then task.spawn(opts.Callback, state) end
+		else
+			local changed = value ~= state
+			state = value
+			render()
+			if changed then
+				signal.Fire(state, "bubble")
+				if opts.Callback then task.spawn(opts.Callback, state) end
+			end
+		end
+		return true
+	end
+	function widget:SetColor(value)
+		assert(typeof(value) == "Color3", "SetColor expects a Color3")
+		color = value
+		render()
+	end
+	function widget:SetInactiveColor(value)
+		assert(typeof(value) == "Color3", "SetInactiveColor expects a Color3")
+		inactive = value
+		render()
+	end
+	function widget:SetImage(value) icon.Image = FloatingImage(value) end
+	function widget:SetVisible(visible) bubble.Visible = visible == true end
+	function widget:SetPosition(position)
+		assert(typeof(position) == "UDim2", "SetPosition expects UDim2")
+		bubble.Position = position
+	end
+	function widget:OnChanged(callback) return signal.Connect(callback) end
+	function widget:Destroy()
+		if self._Destroyed then return end
+		self._Destroyed = true
+		FloatingWidgetRegistry[self] = nil
+		if sourceConnection then sourceConnection:Disconnect(); sourceConnection = nil end
+		scope:Destroy()
+	end
+	scope:Add(function()
+		widget._Destroyed = true
+		FloatingWidgetRegistry[widget] = nil
+		if sourceConnection then sourceConnection:Disconnect(); sourceConnection = nil end
+	end)
+	RegisterFloatingDrag(bubble, bubble, function() widget:Set(not state) end, opts.Draggable, scope)
+	FloatingWidgetRegistry[widget] = true
+	scope:Add(VVindUI:OnConfigLoaded(function() widget:Refresh() end))
+	widget:Refresh()
+	return widget
+end
+
+function Window:CreateBubbleToggle(opts)
+	opts = opts or {}
+	local config = table.clone(opts)
+	config.Window = self
+	return VVindUI:CreateBubbleToggle(config)
+end
+
+
+
+-- Detachable, event-driven state/keybind list. Never polls on Heartbeat.
+function VVindUI:CreateStateList(opts)
+	opts = opts or {}
+	local scope = FloatingScope(opts)
+	local background = FloatingColor(opts.Color, self.Theme.Background)
+	local activeColor = FloatingColor(opts.ActiveColor, self.Theme.Accent)
+	local inactiveColor = FloatingColor(opts.InactiveColor, self.Theme.TextDim)
+	local width = math.clamp(tonumber(opts.Width) or 190, 120, 450)
+	local panel = Instance.new("Frame")
+	panel.Name = opts.Name or "VVindStateList"
+	panel.BackgroundColor3 = background
+	panel.BackgroundTransparency = math.clamp(tonumber(opts.Transparency) or 0.15, 0, 1)
+	panel.BorderSizePixel = 0
+	panel.AutomaticSize = Enum.AutomaticSize.Y
+	panel.Size = UDim2.fromOffset(width, 0)
+	panel.Position = typeof(opts.Position) == "UDim2" and opts.Position or UDim2.fromOffset(20, 270)
+	panel.ZIndex = 501
+	panel.Parent = self._Root
+	Corner(panel, tonumber(opts.CornerRadius) or 10)
+	local border = Stroke(panel, activeColor, 1, 0.65)
+	scope:Add(panel)
+	local padding = Instance.new("UIPadding")
+	padding.PaddingTop = UDim.new(0, 7)
+	padding.PaddingBottom = UDim.new(0, 7)
+	padding.PaddingLeft = UDim.new(0, 9)
+	padding.PaddingRight = UDim.new(0, 9)
+	padding.Parent = panel
+	local layout = Instance.new("UIListLayout")
+	layout.Padding = UDim.new(0, 3)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = panel
+	local header = Instance.new("TextButton")
+	header.Name = "DragHandle"
+	header.BackgroundTransparency = 1
+	header.Text = opts.Title or "Keybinds"
+	header.FontFace = self.Theme.Font
+	header.TextColor3 = FloatingColor(opts.TitleColor, self.Theme.Text)
+	header.TextSize = 13
+	header.TextXAlignment = Enum.TextXAlignment.Left
+	header.AutoButtonColor = false
+	header.Size = UDim2.new(1, 0, 0, 23)
+	header.LayoutOrder = 0
+	header.ZIndex = panel.ZIndex + 1
+	header.Parent = panel
+	if opts.TitleKey then self:Localize(header, opts.TitleKey) end
+	local items = {}
+	local nextOrder = 0
+	local list = {
+		Instance = panel,
+		Header = header,
+		Scope = scope,
+		_Destroyed = false,
+	}
+	local function boolState(value)
+		if type(value) == "boolean" then return value end
+		if type(value) == "table" then
+			if type(value.Active) == "boolean" then return value.Active end
+			if type(value.Enabled) == "boolean" then return value.Enabled end
+		end
+		return value ~= nil and value ~= false
+	end
+	local function refreshEntry(entry)
+		if list._Destroyed then return end
+		local info = entry.Info
+		local value = entry.ManualState
+		local api = info.Control or (info.Flag and VVindUI.Flags[info.Flag])
+		if api ~= entry.Source then
+			if entry.Connection then entry.Connection:Disconnect(); entry.Connection = nil end
+			entry.Source = api
+			if api then
+				local listener = api.OnStateChanged or api.OnChanged
+				if type(listener) == "function" then
+					entry.Connection = listener(api, function() refreshEntry(entry) end)
+				end
+			end
+		end
+		if api then
+			local getter = api.GetActive or api.Get
+			if type(getter) == "function" then
+				local ok, result = pcall(getter, api)
+				if ok then value = result end
+			end
+		elseif type(info.Get) == "function" then
+			local ok, result = pcall(info.Get)
+			if ok then value = result end
+		end
+		local active = boolState(value)
+		local tint = active and FloatingColor(info.Color, activeColor)
+			or FloatingColor(info.InactiveColor, inactiveColor)
+		entry.Dot.BackgroundColor3 = tint
+		entry.Status.Text = active and tostring(info.ActiveText or "ON") or tostring(info.InactiveText or "OFF")
+		entry.Status.TextColor3 = tint
+		entry.Active = active
+	end
+	function list:AddItem(info)
+		assert(type(info) == "table", "state list item must be a table")
+		nextOrder += 1
+		local key = info.Id or info.Flag or info.Text or tostring(nextOrder)
+		key = tostring(key)
+		if items[key] then error("duplicate state list item: " .. key, 2) end
+		local row = Instance.new("Frame")
+		row.Name = "State_" .. key
+		row.BackgroundTransparency = 1
+		row.Size = UDim2.new(1, 0, 0, 22)
+		row.LayoutOrder = nextOrder
+		row.ZIndex = panel.ZIndex + 1
+		row.Parent = panel
+		local dot = Instance.new("Frame")
+		dot.Name = "StateDot"
+		dot.BackgroundColor3 = inactiveColor
+		dot.BorderSizePixel = 0
+		dot.Size = UDim2.fromOffset(7, 7)
+		dot.Position = UDim2.fromOffset(1, 7)
+		dot.ZIndex = row.ZIndex + 1
+		dot.Parent = row
+		Corner(dot, 4)
+		local textLabel = Instance.new("TextLabel")
+		textLabel.Name = "Label"
+		textLabel.BackgroundTransparency = 1
+		textLabel.Text = tostring(info.Text or info.Label or info.Flag or key)
+		textLabel.TextColor3 = FloatingColor(info.TextColor, VVindUI.Theme.Text)
+		textLabel.FontFace = VVindUI.Theme.FontRegular
+		textLabel.TextSize = 12
+		textLabel.TextXAlignment = Enum.TextXAlignment.Left
+		textLabel.TextTruncate = Enum.TextTruncate.AtEnd
+		textLabel.Position = UDim2.fromOffset(14, 0)
+		textLabel.Size = UDim2.new(1, -58, 1, 0)
+		textLabel.ZIndex = row.ZIndex + 1
+		textLabel.Parent = row
+		if info.TextKey then VVindUI:Localize(textLabel, info.TextKey) end
+		local status = Instance.new("TextLabel")
+		status.Name = "Status"
+		status.BackgroundTransparency = 1
+		status.Text = "OFF"
+		status.TextColor3 = inactiveColor
+		status.FontFace = VVindUI.Theme.Font
+		status.TextSize = 11
+		status.TextXAlignment = Enum.TextXAlignment.Right
+		status.Position = UDim2.new(1, -44, 0, 0)
+		status.Size = UDim2.new(0, 44, 1, 0)
+		status.ZIndex = row.ZIndex + 1
+		status.Parent = row
+		local entry = {
+			Info = info, Row = row, Label = textLabel, Dot = dot,
+			Status = status, ManualState = info.Default == true,
+		}
+		items[key] = entry
+		refreshEntry(entry)
+		return key
+	end
+	function list:RemoveItem(key)
+		local entry = items[tostring(key)]
+		if not entry then return false end
+		items[tostring(key)] = nil
+		if entry.Connection then entry.Connection:Disconnect() end
+		entry.Row:Destroy()
+		return true
+	end
+	function list:SetItemState(key, value)
+		local entry = items[tostring(key)]
+		if not entry then return false end
+		entry.ManualState = value == true
+		refreshEntry(entry)
+		return true
+	end
+	function list:SetColor(value)
+		assert(typeof(value) == "Color3", "SetColor expects Color3")
+		background = value
+		panel.BackgroundColor3 = value
+	end
+	function list:SetActiveColor(value)
+		assert(typeof(value) == "Color3", "SetActiveColor expects Color3")
+		activeColor = value
+		border.Color = value
+		self:Refresh()
+	end
+	function list:SetInactiveColor(value)
+		assert(typeof(value) == "Color3", "SetInactiveColor expects Color3")
+		inactiveColor = value
+		self:Refresh()
+	end
+	function list:SetVisible(value) panel.Visible = value == true end
+	function list:SetPosition(position)
+		assert(typeof(position) == "UDim2", "SetPosition expects UDim2")
+		panel.Position = position
+	end
+	function list:Refresh()
+		if self._Destroyed then return end
+		for _, entry in pairs(items) do refreshEntry(entry) end
+	end
+	function list:Destroy()
+		if self._Destroyed then return end
+		self._Destroyed = true
+		FloatingWidgetRegistry[self] = nil
+		for _, entry in pairs(items) do
+			if entry.Connection then entry.Connection:Disconnect() end
+		end
+		table.clear(items)
+		scope:Destroy()
+	end
+	scope:Add(function()
+		list._Destroyed = true
+		FloatingWidgetRegistry[list] = nil
+		for _, entry in pairs(items) do
+			if entry.Connection then entry.Connection:Disconnect() end
+		end
+		table.clear(items)
+	end)
+	local collapsed = false
+	RegisterFloatingDrag(header, panel, function()
+		if opts.Collapsible then
+			collapsed = not collapsed
+			for _, entry in pairs(items) do entry.Row.Visible = not collapsed end
+		end
+	end, opts.Draggable, scope)
+	for _, info in ipairs(opts.Items or {}) do list:AddItem(info) end
+	FloatingWidgetRegistry[list] = true
+	scope:Add(VVindUI:OnConfigLoaded(function() list:Refresh() end))
+	return list
+end
+
+function Window:CreateStateList(opts)
+	opts = opts or {}
+	local config = table.clone(opts)
+	config.Window = self
+	return VVindUI:CreateStateList(config)
+end
+
+VVindUI.CreateKeybindList = VVindUI.CreateStateList
+Window.CreateKeybindList = Window.CreateStateList
+
+-- Public declarative adapter, keeping all existing Add* methods intact.
+function Tab:AddControl(opts)
+	assert(type(opts) == "table", "AddControl expects a definition table")
+	local normalized = table.clone(opts)
+	normalized.Text = normalized.Text or normalized.Name or normalized.name
+	normalized.Flag = normalized.Flag or normalized.flag
+	normalized.Options = normalized.Options or normalized.Items or normalized.items
+	if normalized.Default == nil then normalized.Default = normalized.default end
+	normalized.Callback = normalized.Callback or normalized.callback
+	normalized.MultiSelect = normalized.MultiSelect == true or normalized.multiselect == true
+	local kind = string.lower(tostring(normalized.Type or normalized.Kind or normalized.type or ""))
+	local methods = {
+		toggle = "AddToggle", slider = "AddSlider",
+		dropdown = "AddDropdown", select = "AddDropdown",
+		button = "AddButton", textbox = "AddTextbox",
+		card = "AddCard", rating = "AddRating", table = "AddTable",
+		console = "AddConsole", cardgrid = "AddCardGrid",
+		infogrid = "AddInfoGrid", systeminfogrid = "AddSystemInfoGrid",
+		gradientcard = "AddGradientCard", divider = "AddDivider",
+		colorpicker = "AddColorPicker", color = "AddColorPicker",
+		keybind = "AddKeybind", paragraph = "AddParagraph",
+		label = "AddLabel", section = "AddSection",
+	}
+	local method = methods[kind]
+	assert(method and type(self[method]) == "function", "unsupported AddControl Type: " .. kind)
+	return self[method](self, normalized)
+end
+
+function Tab:AddControls(definitions)
+	assert(type(definitions) == "table", "AddControls expects an array")
+	local result = {}
+	for index, definition in ipairs(definitions) do
+		local control = self:AddControl(definition)
+		result[index] = control
+		local key = definition.Id or definition.Flag or definition.flag
+		if key ~= nil then result[key] = control end
+	end
+	return result
+end
+
+
 local function DestroyAllWindowJanitors()
 	local windows = table.clone(VVindUI._Windows)
 	for _, win in ipairs(windows) do
@@ -15268,6 +16257,7 @@ local function DestroyAllWindowJanitors()
 end
  
 VVindUI._Root.Destroying:Connect(function()
+	DestroyActiveScopes()
 	AcrylicShuttingDown = true
 	DestroyAllWindowJanitors()
 	DestroyAllAcrylicControllers()
@@ -15275,6 +16265,7 @@ VVindUI._Root.Destroying:Connect(function()
 end)
  
 function VVindUI:Unload()
+	DestroyActiveScopes()
 	CloseAnyOpenPopup()
 	AcrylicShuttingDown = true
 	DestroyAllWindowJanitors()
