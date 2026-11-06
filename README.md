@@ -831,6 +831,20 @@ local saved = VindUI:GetSavedConfig("legit")
 VindUI:DeleteConfig("legit")
 ```
 
+### Initialize saved control state
+
+Automatic settings are applied silently while controls are created. Once **all tabs and controls** have been built, call `InitializeCallbacks()` to synchronize your script's behavior with the current UI state, including toggles set to `false`:
+
+```lua
+-- Define your tabs and all flagged controls first, then:
+local ok, initialized, errors = VindUI:InitializeCallbacks()
+if not ok then warn("Some controls could not be initialized", errors) end
+```
+
+Only registered controls with a `Flag` and a `Callback` participate. Sliders, dropdowns, color pickers, and textboxes initialize first in their creation order, followed by toggles in creation order. Keybind callbacks are excluded, preventing simulated key presses or rebinding. The callback receives its current value and `{ Source = "initialization", Action = "initialize" }` as its metadata (textbox callbacks receive `text, false, info`).
+
+The method runs **once per control**, including controls with default values and disabled toggles. Calling it again only initializes newly registered controls or retries callbacks that previously failed. It invokes callbacks directly, without changing control values, firing `OnChanged`, or triggering an automatic configuration save. If a callback itself changes a flag, that change follows the usual save rules. Use `SetConfig(data, false)` or `LoadConfig(name, false)` for subsequent loads that should invoke callbacks.
+
 Automatic settings are loaded as flagged controls are created and saved after values change. Named configs are stored as `.cfg` files under `Vvind-UI/Settings/<Folder>`; `Folder` defaults to `Randoms`. Descriptions and tags are kept in a companion metadata file.
 
 Config loading validates every flag before changing controls. Unknown flags or invalid values reject the load; if a control setter fails, already changed controls are restored. Use flag migrations when a stable flag needs to be renamed:
