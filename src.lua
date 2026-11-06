@@ -20,6 +20,7 @@ VVindUI.Flags = {}
 VVindUI.ConfigFlags = {}
 VVindUI.ConfigValidators = {}
 VVindUI.FlagMigrations = {}
+VVindUI._NextControlRegistration = 0
 VVindUI._Windows = {}
  
 local function GetGlobalTable()
@@ -8627,6 +8628,11 @@ local function RegisterFlag(opts, api, kind, validator)
 		api.Flag = flag
 		api.Kind = kind
 		api.Label = opts.Text or opts.Label or flag
+		if kind ~= "Keybind" and type(opts.Callback) == "function" then
+			VVindUI._NextControlRegistration += 1
+			api._InitializationCallback = opts.Callback
+			api._RegistrationOrder = VVindUI._NextControlRegistration
+		end
 		api.ValidateConfig = validator or function(value) return ValidateConfigFlag(api, value) end
 		VVindUI.Flags[flag] = api
 		VVindUI.ConfigFlags[flag] = api.Set
@@ -14133,6 +14139,52 @@ function VVindUI:GetValues()
 		end
 	end
 	return values
+end
+
+-- Initialize controls after all tabs have been constructed and their saved values restored.
+-- Unlike Set(..., false), this does not change flags or emit OnChanged notifications.
+function VVindUI:InitializeCallbacks()
+	local pending = {}
+	for flag, api in pairs(self.Flags) do
+		if api._InitializationCallback and not api._CallbacksInitialized then
+			table.insert(pending, { Flag = flag, Api = api })
+		end
+	end
+	table.sort(pending, function(a, b)
+		local aToggle = a.Api.Kind == "Toggle"
+		local bToggle = b.Api.Kind == "Toggle"
+		if aToggle ~= bToggle then return not aToggle end
+		return a.Api._RegistrationOrder < b.Api._RegistrationOrder
+	end)
+
+	local initialized, errors = 0, {}
+	for _, entry in ipairs(pending) do
+		local api = entry.Api
+		if self.Flags[entry.Flag] == api and not api._CallbacksInitialized then
+			local readOk, value = pcall(ReadControlValue, api)
+			if not readOk then
+				table.insert(errors, { Flag = entry.Flag, Error = tostring(value) })
+				warn("[VindUI] Could not initialize '" .. entry.Flag .. "': " .. tostring(value))
+			else
+				api._CallbacksInitialized = true
+				local info = { Source = "initialization", Action = "initialize" }
+				local ok, err
+				if api.Kind == "Textbox" then
+					ok, err = pcall(api._InitializationCallback, CopyConfigValue(value), false, info)
+				else
+					ok, err = pcall(api._InitializationCallback, CopyConfigValue(value), info)
+				end
+				if ok then
+					initialized += 1
+				else
+					api._CallbacksInitialized = false
+					table.insert(errors, { Flag = entry.Flag, Error = tostring(err) })
+					warn("[VindUI] Could not initialize '" .. entry.Flag .. "': " .. tostring(err))
+				end
+			end
+		end
+	end
+	return #errors == 0, initialized, errors
 end
 
 VVindUI.GetFlag = VVindUI.GetValue
