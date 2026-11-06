@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.11.1 — 2026-11-06
+
+### Fixed
+
+- Removed on-screen dragging limits for floating toggle bubbles. Bubbles can now be dragged completely beyond the viewport in the current session, while state/keybind lists keep their original bounded dragging behavior.
+- Bubble positions are not automatically saved or restored between executions; their initial placement continues to use the caller-provided Position option or the library default.
+
 ## 2.11.0 — 2026-11-06
 
 ### Added

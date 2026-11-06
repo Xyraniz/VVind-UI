@@ -15,7 +15,7 @@ local IsMobileDevice = UserInputService.TouchEnabled and not UserInputService.Mo
  
 local VVindUI = {}
 VVindUI.__index = VVindUI
-VVindUI.Version = "2.11.0"
+VVindUI.Version = "2.11.1"
 VVindUI.Flags = {}
 VVindUI.ConfigFlags = {}
 VVindUI.ConfigValidators = {}
@@ -15764,7 +15764,7 @@ local function FloatingImage(value)
 	if type(value) == "string" then return ResolveIcon(value) end
 	return ""
 end
-local function RegisterFloatingDrag(handle, frame, onTap, draggable, scope)
+local function RegisterFloatingDrag(handle, frame, onTap, draggable, scope, allowOffscreen)
 	handle.Active = true
 	scope:Add(handle.InputBegan:Connect(function(input)
 		if ActiveFloatingDrag then return end
@@ -15780,6 +15780,7 @@ local function RegisterFloatingDrag(handle, frame, onTap, draggable, scope)
 			Position = pos,
 			Moved = false,
 			Draggable = draggable ~= false,
+			AllowOffscreen = allowOffscreen == true,
 			OnTap = onTap,
 		}
 	end))
@@ -15799,9 +15800,13 @@ LibJanitor:Add(UserInputService.InputChanged:Connect(function(input)
 	drag.Moved = true
 	local scale = GetUIScale()
 	local root = VVindUI._Root
+	local position = drag.Position + delta / scale
+	if drag.AllowOffscreen then
+		drag.Frame.Position = UDim2.fromOffset(math.round(position.X), math.round(position.Y))
+		return
+	end
 	local maxX = math.max(0, root.AbsoluteSize.X / scale - drag.Frame.AbsoluteSize.X / scale)
 	local maxY = math.max(0, root.AbsoluteSize.Y / scale - drag.Frame.AbsoluteSize.Y / scale)
-	local position = drag.Position + delta / scale
 	drag.Frame.Position = UDim2.fromOffset(
 		math.clamp(position.X, 0, maxX),
 		math.clamp(position.Y, 0, maxY)
@@ -15958,7 +15963,7 @@ function VVindUI:CreateBubbleToggle(opts)
 		FloatingWidgetRegistry[widget] = nil
 		if sourceConnection then sourceConnection:Disconnect(); sourceConnection = nil end
 	end)
-	RegisterFloatingDrag(bubble, bubble, function() widget:Set(not state) end, opts.Draggable, scope)
+	RegisterFloatingDrag(bubble, bubble, function() widget:Set(not state) end, opts.Draggable, scope, true)
 	FloatingWidgetRegistry[widget] = true
 	scope:Add(VVindUI:OnConfigLoaded(function() widget:Refresh() end))
 	widget:Refresh()

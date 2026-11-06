@@ -5,7 +5,7 @@ A fork of VVind UI.
 A polished Luau interface library for Roblox with resizable windows, tabs, form controls, notifications, local configurations, data views, dock buttons, and optional service panels.
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-2.11.0-7c5cff?style=for-the-badge">
+  <img alt="Version" src="https://img.shields.io/badge/version-2.11.1-7c5cff?style=for-the-badge">
   <img alt="Language" src="https://img.shields.io/badge/Luau-Roblox-00A2FF?style=for-the-badge&logo=roblox">
   <img alt="Library" src="https://img.shields.io/badge/UI-Vind%20Ui%20Reborn-24c76a?style=for-the-badge">
 </p>
@@ -1200,7 +1200,7 @@ bubble:SetVisible(true)
 -- bubble:Destroy()
 ~~~
 
-Both UI:CreateBubbleToggle and window:CreateBubbleToggle are available. The window method cleans up when that window is destroyed. Bubbles can bind to Flag or Control, or operate standalone using Default and Callback. Methods include Get, Set, OnChanged, SetColor, SetInactiveColor, SetImage, SetVisible, SetPosition and Destroy. They share one input/drag manager.
+Both UI:CreateBubbleToggle and window:CreateBubbleToggle are available. The window method cleans up when that window is destroyed. Bubbles can bind to Flag or Control, or operate standalone using Default and Callback. Methods include Get, Set, OnChanged, SetColor, SetInactiveColor, SetImage, SetVisible, SetPosition and Destroy. They share one input/drag manager. Bubble dragging has no viewport boundary; positions are not saved between executions. Keybind/state lists retain bounded dragging.
 
 ### Event-driven keybind and state lists
 
