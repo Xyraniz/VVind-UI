@@ -11386,6 +11386,14 @@ function Tab:AddAssetGrid(opts)
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
 	layout.Parent = grid
 
+	local emptyOverlay = Instance.new("Frame")
+	emptyOverlay.Name = "EmptyOverlay"
+	emptyOverlay.BackgroundTransparency = 1
+	emptyOverlay.Position = grid.Position
+	emptyOverlay.Size = grid.Size
+	emptyOverlay.ZIndex = Z.Content + 1
+	emptyOverlay.Parent = card
+
 	local emptyLabel = Instance.new("TextLabel")
 	emptyLabel.Name = "Empty"
 	emptyLabel.BackgroundTransparency = 1
@@ -11395,7 +11403,7 @@ function Tab:AddAssetGrid(opts)
 	emptyLabel.TextSize = 12
 	emptyLabel.Size = UDim2.fromScale(1, 1)
 	emptyLabel.ZIndex = Z.Content + 2
-	emptyLabel.Parent = grid
+	emptyLabel.Parent = emptyOverlay
 
 	local entries = {}
 	local function relayout()
@@ -11413,8 +11421,10 @@ function Tab:AddAssetGrid(opts)
 		local top = header.Size.Y.Offset
 		grid.Position = UDim2.fromOffset(12, top)
 		grid.Size = UDim2.new(1, -24, 0, height)
+		emptyOverlay.Position = grid.Position
+		emptyOverlay.Size = grid.Size
 		card.Size = UDim2.new(1, 0, 0, top + height + 12)
-		emptyLabel.Visible = #options == 0
+		emptyOverlay.Visible = #options == 0
 	end
 
 	local function renderSelection()
@@ -11448,7 +11458,7 @@ function Tab:AddAssetGrid(opts)
 			button.BackgroundColor3 = VVindUI.Theme.Surface
 			button.BackgroundTransparency = 0.91
 			button.BorderSizePixel = 0
-			button.ClipsDescendants = true
+			button.ClipsDescendants = false
 			button.LayoutOrder = index
 			button.ZIndex = Z.Content + 2
 			button.Parent = grid
@@ -14860,6 +14870,9 @@ function VVindUI:InitializeCallbacks()
 				local ok, err
 				if api.Kind == "Textbox" then
 					ok, err = pcall(api._InitializationCallback, CopyConfigValue(value), false, info)
+				elseif api.Kind == "AssetGrid" then
+					ok, err = pcall(api._InitializationCallback, CopyConfigValue(value), info,
+						api.GetOption and api:GetOption() or nil)
 				else
 					ok, err = pcall(api._InitializationCallback, CopyConfigValue(value), info)
 				end
@@ -15588,6 +15601,8 @@ function VVindUI:ResetConfiguration(opts)
 				local ok, err
 				if entry.Api.Kind == "Textbox" then
 					ok, err = pcall(cb, value, false, info)
+				elseif entry.Api.Kind == "AssetGrid" then
+					ok, err = pcall(cb, value, info, entry.Api.GetOption and entry.Api:GetOption() or nil)
 				else
 					ok, err = pcall(cb, value, info)
 				end
