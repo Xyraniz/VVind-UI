@@ -15,7 +15,7 @@ local IsMobileDevice = UserInputService.TouchEnabled and not UserInputService.Mo
  
 local VVindUI = {}
 VVindUI.__index = VVindUI
-VVindUI.Version = "2.11.1"
+VVindUI.Version = "2.12.0"
 VVindUI.Flags = {}
 VVindUI.ConfigFlags = {}
 VVindUI.ConfigValidators = {}
@@ -11295,6 +11295,309 @@ local function ComputePopupPosition(window, card, w, h)
 	return math.round(px / s), math.round(py / s)
 end
  
+
+-- Asset previews are deliberately independent of window backgrounds.
+function Tab:AddAssetGrid(opts)
+	opts = opts or {}
+
+	local function normalizeImage(reference)
+		if reference == nil or reference == "" then return "" end
+		if type(reference) == "number" then
+			assert(reference > 0 and reference % 1 == 0 and reference < math.huge,
+				"AssetGrid image IDs must be positive integers")
+			return "rbxassetid://" .. tostring(reference)
+		end
+		assert(type(reference) == "string", "AssetGrid images must be asset IDs or image URLs")
+		if reference:match("^%d+$") then return "rbxassetid://" .. reference end
+		assert(IsValidImageReference(reference),
+			"AssetGrid image must be an asset ID, rbxasset:// path, or HTTP(S) image URL")
+		return reference
+	end
+
+	local function normalizeOptions(list)
+		assert(type(list) == "table", "AssetGrid Options must be an array")
+		local normalized, seen = {}, {}
+		for index, item in ipairs(list) do
+			local value, image, label, labelKey
+			if type(item) == "table" then
+				image = item.AssetId
+				if image == nil then image = item.Image end
+				value = item.Value
+				if value == nil then value = image end
+				label, labelKey = item.Label, item.LabelKey
+			else
+				value, image = item, item
+			end
+			assert(type(value) == "string" or type(value) == "number",
+				"AssetGrid option Value must be a string or number")
+			assert(not seen[value], "AssetGrid option Values must be unique")
+			seen[value] = true
+			if type(labelKey) == "string" then label = VVindUI:Translate(labelKey) end
+			table.insert(normalized, {
+				Value = value,
+				Image = normalizeImage(image),
+				Label = tostring(label ~= nil and label or value),
+				Index = index,
+			})
+		end
+		return normalized
+	end
+
+	local rawOptions = opts.Options or opts.Items or {}
+	local options = normalizeOptions(rawOptions)
+	local function findOption(value)
+		for _, option in ipairs(options) do
+			if option.Value == value then return option end
+		end
+		return nil
+	end
+	local selected = findOption(opts.Default) and opts.Default or (options[1] and options[1].Value)
+	local locked = opts.Locked == true
+	local signal = MakeSignal()
+
+	local headerHeight = opts.Description and opts.Description ~= "" and 56 or 44
+	local card = BaseCard(self._page, headerHeight + 12)
+	card.Name = "AssetGrid"
+	self._window:_RegisterSearchable(self, opts.Text or "Assets", card)
+
+	local header = Instance.new("Frame")
+	header.Name = "Header"
+	header.BackgroundTransparency = 1
+	header.Size = UDim2.new(1, 0, 0, headerHeight)
+	header.ZIndex = Z.Content + 1
+	header.Parent = card
+	local titleX = AddLeadingIcon(header, opts.Icon, headerHeight)
+	AddTitleDesc(header, titleX, 14, opts.Text or "Assets", opts.Description, headerHeight)
+
+	local grid = Instance.new("Frame")
+	grid.Name = "Previews"
+	grid.BackgroundTransparency = 1
+	grid.Position = UDim2.fromOffset(12, headerHeight)
+	grid.Size = UDim2.new(1, -24, 0, 0)
+	grid.ZIndex = Z.Content + 1
+	grid.Parent = card
+
+	local layout = Instance.new("UIGridLayout")
+	local gap = math.max(2, tonumber(opts.Gap) or 8)
+	local columns = math.clamp(math.floor(tonumber(opts.Columns) or 2), 1, 6)
+	local minCellWidth = math.max(65, tonumber(opts.MinCellWidth) or 110)
+	local cellHeight = math.max(60, tonumber(opts.CellHeight) or 98)
+	layout.CellPadding = UDim2.fromOffset(gap, gap)
+	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Parent = grid
+
+	local emptyLabel = Instance.new("TextLabel")
+	emptyLabel.Name = "Empty"
+	emptyLabel.BackgroundTransparency = 1
+	emptyLabel.FontFace = VVindUI.Theme.FontRegular
+	emptyLabel.Text = opts.EmptyText or "No assets available"
+	emptyLabel.TextColor3 = VVindUI.Theme.TextDim
+	emptyLabel.TextSize = 12
+	emptyLabel.Size = UDim2.fromScale(1, 1)
+	emptyLabel.ZIndex = Z.Content + 2
+	emptyLabel.Parent = grid
+
+	local entries = {}
+	local function relayout()
+		if not card.Parent then return end
+		local width = grid.AbsoluteSize.X / GetUIScale()
+		local visibleColumns = columns
+		if width > 0 then
+			visibleColumns = math.min(columns,
+				math.max(1, math.floor((width + gap) / (minCellWidth + gap))))
+		end
+		layout.CellSize = UDim2.new(1 / visibleColumns,
+			-gap * (visibleColumns - 1) / visibleColumns, 0, cellHeight)
+		local rows = math.ceil(#options / visibleColumns)
+		local height = rows > 0 and (rows * cellHeight + (rows - 1) * gap) or 40
+		local top = header.Size.Y.Offset
+		grid.Position = UDim2.fromOffset(12, top)
+		grid.Size = UDim2.new(1, -24, 0, height)
+		card.Size = UDim2.new(1, 0, 0, top + height + 12)
+		emptyLabel.Visible = #options == 0
+	end
+
+	local function renderSelection()
+		for _, entry in ipairs(entries) do
+			local active = entry.Option.Value == selected
+			entry.Stroke.Color = active and VVindUI.Theme.Accent or VVindUI.Theme.Border
+			entry.Stroke.Transparency = active and 0.08 or 0.68
+			entry.Stroke.Thickness = active and 2 or 1
+			entry.Check.Visible = active
+			entry.Button.BackgroundTransparency = active and 0.78 or 0.91
+			entry.Button.Active = not locked
+		end
+	end
+
+	local function fireChanged()
+		local option = findOption(selected)
+		local info = ChangeInfo()
+		local snapshot = option and table.clone(option) or nil
+		if opts.Callback then task.spawn(opts.Callback, selected, info, snapshot) end
+		signal.Fire(selected, info, snapshot)
+	end
+
+	local function buildOptions()
+		for _, entry in ipairs(entries) do entry.Button:Destroy() end
+		table.clear(entries)
+		for index, option in ipairs(options) do
+			local button = Instance.new("TextButton")
+			button.Name = "Asset_" .. tostring(index)
+			button.Text = ""
+			button.AutoButtonColor = false
+			button.BackgroundColor3 = VVindUI.Theme.Surface
+			button.BackgroundTransparency = 0.91
+			button.BorderSizePixel = 0
+			button.ClipsDescendants = true
+			button.LayoutOrder = index
+			button.ZIndex = Z.Content + 2
+			button.Parent = grid
+			Corner(button, 10)
+			local border = Stroke(button, VVindUI.Theme.Border, 1, 0.68)
+
+			if option.Image ~= "" then
+				local preview = Instance.new("ImageLabel")
+				preview.Name = "Preview"
+				preview.BackgroundTransparency = 1
+				preview.Image = option.Image
+				preview.ImageColor3 = Color3.new(1, 1, 1)
+				preview:SetAttribute("VVindThemeImageColorExempt", true)
+				preview.ScaleType = Enum.ScaleType.Crop
+				preview.Size = UDim2.fromScale(1, 1)
+				preview.ZIndex = Z.Content + 3
+				preview.Parent = button
+				Corner(preview, 10)
+
+				local labelShade = Instance.new("Frame")
+				labelShade.Name = "CaptionBackdrop"
+				labelShade.BackgroundColor3 = Color3.fromRGB(12, 13, 17)
+				labelShade.BackgroundTransparency = 0.25
+				labelShade:SetAttribute("VVindThemeColorExempt", true)
+				labelShade.BorderSizePixel = 0
+				labelShade.AnchorPoint = Vector2.new(0.5, 1)
+				labelShade.Position = UDim2.new(0.5, 0, 1, -5)
+				labelShade.Size = UDim2.new(1, -10, 0, 23)
+				labelShade.ZIndex = Z.Content + 4
+				labelShade.Parent = button
+				Corner(labelShade, 6)
+			end
+
+			local label = Instance.new("TextLabel")
+			label.Name = "AssetName"
+			label.BackgroundTransparency = 1
+			label.FontFace = VVindUI.Theme.Font
+			label.Text = option.Label
+			label.TextColor3 = VVindUI.Theme.Text
+			label.TextSize = 12
+			label.TextTruncate = Enum.TextTruncate.AtEnd
+			label.TextXAlignment = Enum.TextXAlignment.Center
+			label.TextYAlignment = Enum.TextYAlignment.Center
+			label.AnchorPoint = Vector2.new(0.5, option.Image == "" and 0.5 or 1)
+			label.Position = option.Image == "" and UDim2.fromScale(0.5, 0.5)
+				or UDim2.new(0.5, 0, 1, -6)
+			label.Size = UDim2.new(1, -20, 0, option.Image == "" and cellHeight - 12 or 21)
+			label.ZIndex = Z.Content + 5
+			label.Parent = button
+
+			local check = Instance.new("ImageLabel")
+			check.Name = "Selected"
+			check.BackgroundColor3 = VVindUI.Theme.Accent
+			check.BackgroundTransparency = 0.06
+			check.BorderSizePixel = 0
+			check.Image = ResolveIcon("check")
+			check.ImageColor3 = VVindUI.Theme.Background
+			check.AnchorPoint = Vector2.new(1, 0)
+			check.Position = UDim2.new(1, -7, 0, 7)
+			check.Size = UDim2.fromOffset(22, 22)
+			check.ZIndex = Z.Content + 6
+			check.Parent = button
+			Corner(check, 7)
+
+			table.insert(entries, { Button = button, Stroke = border, Check = check, Option = option })
+			button.Activated:Connect(function()
+				if locked or selected == option.Value then return end
+				selected = option.Value
+				renderSelection()
+				fireChanged()
+			end)
+			button.MouseEnter:Connect(function()
+				if not locked and selected ~= option.Value then
+					Tween(border, { Transparency = 0.35 }, 0.12)
+				end
+			end)
+			button.MouseLeave:Connect(function()
+				if selected ~= option.Value then
+					Tween(border, { Transparency = 0.68 }, 0.12)
+				end
+			end)
+		end
+		renderSelection()
+		relayout()
+	end
+
+	grid:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
+	header:GetPropertyChangedSignal("Size"):Connect(relayout)
+	buildOptions()
+	task.defer(relayout)
+
+	local localeConnection = VVindUI:RegisterLocaleCallback(function()
+		if not card.Parent then return end
+		options = normalizeOptions(rawOptions)
+		buildOptions()
+	end)
+
+	return RegisterFlag(opts, {
+		Instance = card,
+		Get = function() return selected end,
+		GetOption = function()
+			local option = findOption(selected)
+			return option and table.clone(option) or nil
+		end,
+		Set = function(_, value, silent)
+			assert(value == nil and #options == 0 or findOption(value),
+				"AssetGrid selection is not an available option")
+			local changed = value ~= selected
+			selected = value
+			renderSelection()
+			if changed and not silent then fireChanged() end
+		end,
+		SetOptions = function(_, newOptions)
+			local nextRaw = newOptions or {}
+			local nextOptions = normalizeOptions(nextRaw)
+			local before = findOption(selected)
+			local beforeValue, beforeImage = selected, before and before.Image
+			rawOptions, options = nextRaw, nextOptions
+			if not findOption(selected) then
+				selected = findOption(opts.Default) and opts.Default
+					or (options[1] and options[1].Value)
+			end
+			buildOptions()
+			local after = findOption(selected)
+			if beforeValue ~= selected or beforeImage ~= (after and after.Image) then fireChanged() end
+		end,
+		Refresh = function(self, newOptions)
+			if newOptions ~= nil then self:SetOptions(newOptions) else
+				options = normalizeOptions(rawOptions)
+				buildOptions()
+			end
+		end,
+		SetLocked = function(_, value)
+			locked = value == true
+			renderSelection()
+		end,
+		OnChanged = function(_, fn) return signal.Connect(fn) end,
+		Destroy = function()
+			localeConnection:Disconnect()
+			signal.Clear()
+			card:Destroy()
+		end,
+	}, "AssetGrid", function(value)
+		if value == nil and #options == 0 then return true, nil end
+		if findOption(value) then return true, value end
+		return false, nil, "selection is not an available asset"
+	end)
+end
+
 function Tab:AddDropdown(opts)
 	opts = opts or {}
 	local function normalizeOptions(list)
@@ -16224,6 +16527,7 @@ function Tab:AddControl(opts)
 	local methods = {
 		toggle = "AddToggle", slider = "AddSlider",
 		dropdown = "AddDropdown", select = "AddDropdown",
+		assetgrid = "AddAssetGrid", imagegrid = "AddAssetGrid",
 		button = "AddButton", textbox = "AddTextbox",
 		card = "AddCard", rating = "AddRating", table = "AddTable",
 		console = "AddConsole", cardgrid = "AddCardGrid",

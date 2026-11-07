@@ -523,6 +523,38 @@ print(Animation:Get()) -- "idle_01"
 
 `SetOptions` keeps the current value when it still exists. If it disappears, a single-select dropdown falls back to its valid `Default` or the first option; a multi-select dropdown removes only values that no longer exist. With `MultiSelect = true`, `Default`, `Set`, `Get`, and the callback use a table of selected values.
 
+
+#### AssetGrid
+
+A reusable image/asset selector that shows previews in a responsive grid. It is not tied to backgrounds: the caller decides what selecting an asset does. Asset IDs can be numbers, numeric strings, `rbxassetid://` references, or valid image URLs. Entries with no `AssetId` or `Image` render as a text-only choice.
+
+```lua
+local Assets = Tab:AddAssetGrid({
+    Text = "Choose background",
+    Icon = "Lucide:images",
+    Columns = 2,
+    MinCellWidth = 110,
+    CellHeight = 98,
+    Flag = "ui_background",
+    Default = "default",
+    Options = {
+        { Label = "Default", Value = "default" },
+        { Label = "Crimson", Value = "crimson", AssetId = 1234567890 },
+        { Label = "Blue", Value = "blue", AssetId = "9876543210" },
+    },
+    Callback = function(value, info, option)
+        Window:SetBackgroundImage(option and option.Image or "")
+    end,
+})
+
+Assets:Set("crimson")
+Assets:SetOptions({ { Label = "Default", Value = "default" }, { Label = "Green", AssetId = 1234567890 } })
+Assets:Refresh()
+print(Assets:Get(), Assets:GetOption())
+```
+
+`Options` also accepts bare asset IDs, e.g. `{ 1234567890, 9876543210 }`, or entries with separate `Value` and `Image`. The callback and `OnChanged` receive `(value, info, option)`; `option.Image` is the normalized image reference. `SetOptions` preserves the current selection when available; otherwise it chooses the valid default or first option. Supports `Flag`/auto-config, `EnabledWhen`, `Locked`/`SetLocked`, `TextKey`, `DescriptionKey`, and per-option `LabelKey`. Grid columns collapse automatically on narrow windows.
+
 #### Textbox
 
 ```lua
@@ -751,6 +783,7 @@ Advanced options include `MaxColumns`, `CardWidth`, `MinCardHeight`, `CardPaddin
 | `Toggle` | `Set`, `Get`, `SetLocked`, `OnChanged`, `Destroy` |
 | `Slider` | `Set`, `Get`, `SetRange`, `OnChanged`, `Destroy` |
 | `Dropdown` | `Set`, `Get`, `SetOptions`, `Refresh`, `OnChanged`, `Destroy` |
+| `AssetGrid` | `Set`, `Get`, `GetOption`, `SetOptions`, `Refresh`, `SetLocked`, `OnChanged`, `Destroy` |
 | `Textbox` | `Set`, `Get`, `OnChanged`, `Destroy` |
 | `ColorPicker` | `Set`, `Get`, `OnChanged`, `Destroy` |
 | `Keybind` | `Set`, `Get`, `GetState`, `GetActive`, `SetMode`, `SetContext`, `SetActive`, `GetConflicts`, `Rebind`, `Unbind`, `Reset`, `OnChanged`, `OnStateChanged`, `OnPressed`, `OnModeChanged`, `OnContextChanged`, `Destroy` |

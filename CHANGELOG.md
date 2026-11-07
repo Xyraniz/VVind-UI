@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.12.0 — 2026-11-07
+
+### Added
+
+- Added Tab:AddAssetGrid for reusable image asset preview selection, including responsive grid columns, selectable thumbnails, text-only presets, dynamic options, selection callbacks and automatic flag persistence.
+- Added declarative AssetGrid/ImageGrid controls, API documentation and a demo background selector.
+
+
 ## 2.11.1 — 2026-11-06
 
 ### Fixed

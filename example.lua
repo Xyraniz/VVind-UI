@@ -691,6 +691,25 @@ local sectionsControl = Inputs:AddDropdown({
 	end,
 })
 
+
+local backgroundAssets = Inputs:AddAssetGrid({
+	Text = "Background presets",
+	Description = "Preview assets and select the demo window background.",
+	Icon = "Lucide:images",
+	Columns = 2,
+	Flag = "vvind_background_preset",
+	Default = "default",
+	Options = {
+		{ Value = "default", Label = "Default" },
+		{ Value = "midnight", Label = "Midnight", AssetId = 1234567890 },
+		{ Value = "sunset", Label = "Sunset", AssetId = 9876543210 },
+	},
+	Callback = function(value, _, option)
+		Window:SetBackgroundImage(option and option.Image or "")
+		Console:Log(("Background preset: %s"):format(tostring(value)))
+	end,
+})
+
 local displayNameControl = Inputs:AddTextbox({
 	Text = "Display name",
 	Description = "Text input that is included in the current configuration.",
