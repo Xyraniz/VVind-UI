@@ -11406,18 +11406,14 @@ function Tab:AddAssetGrid(opts)
 	emptyLabel.Parent = emptyOverlay
 
 	local entries = {}
-	local function relayout()
+	local visibleColumns = columns
+	local cellWidth = -1
+	local function updateGridHeight()
 		if not card.Parent then return end
-		local width = grid.AbsoluteSize.X / GetUIScale()
-		local visibleColumns = columns
-		if width > 0 then
-			visibleColumns = math.min(columns,
-				math.max(1, math.floor((width + gap) / (minCellWidth + gap))))
-		end
-		layout.CellSize = UDim2.new(1 / visibleColumns,
-			-gap * (visibleColumns - 1) / visibleColumns, 0, cellHeight)
 		local rows = math.ceil(#options / visibleColumns)
-		local height = rows > 0 and (rows * cellHeight + (rows - 1) * gap) or 40
+		local expectedHeight = rows > 0 and (rows * cellHeight + (rows - 1) * gap) or 40
+		local measuredHeight = layout.AbsoluteContentSize.Y / GetUIScale()
+		local height = math.max(expectedHeight, measuredHeight)
 		local top = header.Size.Y.Offset
 		grid.Position = UDim2.fromOffset(12, top)
 		grid.Size = UDim2.new(1, -24, 0, height)
@@ -11425,6 +11421,27 @@ function Tab:AddAssetGrid(opts)
 		emptyOverlay.Size = grid.Size
 		card.Size = UDim2.new(1, 0, 0, top + height + 12)
 		emptyOverlay.Visible = #options == 0
+	end
+
+	local function relayout()
+		if not card.Parent then return end
+		local width = grid.AbsoluteSize.X / GetUIScale()
+		local availableWidth = math.max(1, width - 4)
+		local nextColumns = columns
+		if width > 0 then
+			nextColumns = math.min(columns,
+				math.max(1, math.floor((availableWidth + gap) / (minCellWidth + gap))))
+		end
+		local nextCellWidth = width > 0
+			and math.max(1, math.floor((availableWidth - (nextColumns - 1) * gap) / nextColumns))
+			or minCellWidth
+		if nextColumns ~= visibleColumns or nextCellWidth ~= cellWidth then
+			visibleColumns = nextColumns
+			cellWidth = nextCellWidth
+			layout.FillDirectionMaxCells = visibleColumns
+			layout.CellSize = UDim2.fromOffset(cellWidth, cellHeight)
+		end
+		updateGridHeight()
 	end
 
 	local function renderSelection()
@@ -11547,6 +11564,7 @@ function Tab:AddAssetGrid(opts)
 
 	grid:GetPropertyChangedSignal("AbsoluteSize"):Connect(relayout)
 	header:GetPropertyChangedSignal("Size"):Connect(relayout)
+	layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(updateGridHeight)
 	buildOptions()
 	task.defer(relayout)
 
