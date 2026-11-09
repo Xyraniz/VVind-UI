@@ -15,7 +15,7 @@ local IsMobileDevice = UserInputService.TouchEnabled and not UserInputService.Mo
  
 local VVindUI = {}
 VVindUI.__index = VVindUI
-VVindUI.Version = "2.13.1"
+VVindUI.Version = "2.13.2"
 VVindUI.Flags = {}
 VVindUI.ConfigFlags = {}
 VVindUI.ConfigValidators = {}
@@ -223,6 +223,7 @@ end
 
 function VVindUI:_TrackLocalizedText(instance, property, key)
 	if type(key) ~= "string" or key == "" then return end
+	if instance:IsA("GuiBase2d") then instance.AutoLocalize = false end
 	local properties = LocalizedEntries[instance]
 	if not properties then
 		properties = {}
@@ -266,33 +267,42 @@ function VVindUI:GetLanguage()
 	return self.Language
 end
 
-function VVindUI:SetLanguage(language)
-	assert(type(language) == "string" and language:match("^[%a][%w_-]*$"), "language must be a locale code")
-	language = string.lower(language)
-	if not self.Locales[language] then return false, "Locale '" .. language .. "' is not registered" end
-	self.Language = language
+local function RefreshLocalizedEntries()
 	for instance, properties in pairs(LocalizedEntries) do
 		local exists = pcall(function() return instance.Parent end)
 		if not exists then
 			LocalizedEntries[instance] = nil
 		else
+			if instance:IsA("GuiBase2d") then instance.AutoLocalize = false end
 			for property, entry in pairs(properties) do
 				local ok, current = pcall(function() return instance[property] end)
 				if ok then
 					if current ~= entry.Current and not entry.Explicit then entry.Key = current end
-					local translated = self:Translate(entry.Key)
+					local translated = VVindUI:Translate(entry.Key)
 					pcall(function() instance[property] = translated end)
 					entry.Current = translated
 				end
 			end
 		end
 	end
+end
+
+function VVindUI:SetLanguage(language)
+	assert(type(language) == "string" and language:match("^[%a][%w_-]*$"), "language must be a locale code")
+	language = string.lower(language)
+	if not self.Locales[language] then return false, "Locale '" .. language .. "' is not registered" end
+	self.Language = language
+	RefreshLocalizedEntries()
 	for _, listener in ipairs(LocaleListeners) do
 		if listener.Connected then
 			local ok, err = pcall(listener.Callback, language)
 			if not ok then warn("[VindUI] language listener error: " .. tostring(err)) end
 		end
 	end
+	RefreshLocalizedEntries()
+	task.defer(function()
+		if VVindUI.Language == language then RefreshLocalizedEntries() end
+	end)
 	return true
 end
 
@@ -357,6 +367,7 @@ VVindUI.validate_locale = VVindUI.ValidateLocale
 VVindUI.register_locale_callback = VVindUI.RegisterLocaleCallback
 
 local function TrackLocalizedInstance(instance)
+	if instance:IsA("GuiBase2d") then instance.AutoLocalize = false end
 	if not instance:IsA("TextLabel") and not instance:IsA("TextButton") and not instance:IsA("TextBox") then return end
 	local ok, text = pcall(function() return instance.Text end)
 	local existing = LocalizedEntries[instance] and LocalizedEntries[instance].Text
@@ -377,6 +388,7 @@ local function TrackLocalizedInstance(instance)
 end
 
 local function TrackLocalizationRoot(root)
+	root.AutoLocalize = false
 	for _, instance in ipairs(root:GetDescendants()) do TrackLocalizedInstance(instance) end
 	LibJanitor:Add(root.DescendantAdded:Connect(TrackLocalizedInstance))
 end
