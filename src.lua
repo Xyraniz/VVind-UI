@@ -15,7 +15,7 @@ local IsMobileDevice = UserInputService.TouchEnabled and not UserInputService.Mo
  
 local VVindUI = {}
 VVindUI.__index = VVindUI
-VVindUI.Version = "2.13.0"
+VVindUI.Version = "2.13.1"
 VVindUI.Flags = {}
 VVindUI.ConfigFlags = {}
 VVindUI.ConfigValidators = {}
@@ -1224,6 +1224,7 @@ local function GetRoot()
  
 	local screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "VVindUI"
+	screenGui.AutoLocalize = false
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = false
 	screenGui.DisplayOrder = 9999
