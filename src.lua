@@ -15,7 +15,7 @@ local IsMobileDevice = UserInputService.TouchEnabled and not UserInputService.Mo
  
 local VVindUI = {}
 VVindUI.__index = VVindUI
-VVindUI.Version = "2.12.0"
+VVindUI.Version = "2.13.0"
 VVindUI.Flags = {}
 VVindUI.ConfigFlags = {}
 VVindUI.ConfigValidators = {}
@@ -1415,6 +1415,7 @@ end
 
 local function KeybindConflicts(control, other)
 	return control ~= other and not control.destroyed and not other.destroyed
+		and not (control.api and other.api and control.api.Flag ~= nil and control.api.Flag == other.api.Flag)
 		and control.mode ~= "Always" and other.mode ~= "Always"
 		and control.key ~= nil and control.key == other.key
 		and KeybindContextsOverlap(control.context, other.context)
@@ -8951,26 +8952,62 @@ function VVindUI:BindEnabledWhen(control, condition, onChanged)
 	return control
 end
 
+-- Controls may share one persisted Flag only when the additional control opts in.
+-- VVindUI.Flags continues to expose the canonical controller; replicas are UI views.
+local SharedFlagGroups = {}
+
+local function ReadSharedFlagValue(api)
+	local getter = api.Kind == "Keybind" and api.GetState or api.Get
+	assert(type(getter) == "function", "SharedFlag requires a readable control")
+	return getter(api)
+end
+
+local function SyncSharedFlag(group, origin, silent)
+	if group.Syncing or origin._SharedFlagDestroyed then return end
+	group.Syncing = true
+	local ok, err = pcall(function()
+		local value = CopyInitialFlagValue(ReadSharedFlagValue(origin))
+		if origin ~= group.Primary then
+			assert(group.Primary, "SharedFlag has no primary controller")
+			group.Primary:Set(CopyInitialFlagValue(value), silent == true)
+			value = CopyInitialFlagValue(ReadSharedFlagValue(group.Primary))
+		end
+		for _, peer in ipairs(group.Controls) do
+			if peer ~= origin and peer ~= group.Primary and not peer._SharedFlagDestroyed then
+				peer:Set(CopyInitialFlagValue(value), true)
+			end
+		end
+	end)
+	group.Syncing = false
+	if not ok then warn("[VindUI] shared flag '" .. group.Flag .. "' could not synchronize: " .. tostring(err)) end
+end
+
 local function RegisterFlag(opts, api, kind, validator)
 	if opts.Flag ~= nil then
 		local flag = opts.Flag
 		if type(flag) ~= "string" or flag:gsub("%s", "") == "" then
 			error("Control Flag must be a non-empty string", 2)
 		end
-		if VVindUI.Flags[flag] then error("duplicate flag '" .. flag .. "'", 2) end
-		if type(api.Set) == "function" then
-			local set = api.Set
-			api.Set = function(control, ...)
-				local previousSource = VVindUI._ChangeSource
-				if previousSource == nil then VVindUI._ChangeSource = "code" end
-				local results = table.pack(pcall(set, control, ...))
-				VVindUI._ChangeSource = previousSource
-				if not results[1] then error(results[2], 2) end
-				return table.unpack(results, 2, results.n)
-			end
+		local existing = VVindUI.Flags[flag]
+		if existing and opts.SharedFlag ~= true then
+			error("duplicate flag '" .. flag .. "' (use SharedFlag = true to mirror it)", 2)
 		end
+		if existing and existing.Kind ~= kind then
+			error("shared flag '" .. flag .. "' must use the same control kind", 2)
+		end
+		if existing and kind == "Keybind" and existing.ToggleFlag ~= api.ToggleFlag then
+			error("shared keybind '" .. flag .. "' must use the same ToggleFlag", 2)
+		end
+
+		local group = SharedFlagGroups[flag]
+		if not group then
+			group = { Flag = flag, Primary = api, Controls = { api }, Syncing = false }
+			SharedFlagGroups[flag] = group
+		end
+
 		api.Flag = flag
 		api.Kind = kind
+		api.Label = opts.Text or opts.Label or flag
 		local initialGetter = kind == "Keybind" and api.GetState or api.Get
 		if type(initialGetter) == "function" then
 			local initialOk, initialValue = pcall(initialGetter, api)
@@ -8979,53 +9016,100 @@ local function RegisterFlag(opts, api, kind, validator)
 				api._InitialValue = CopyInitialFlagValue(initialValue)
 			end
 		end
-		api.Label = opts.Text or opts.Label or flag
-		if kind ~= "Keybind" and type(opts.Callback) == "function" then
+		if not existing and kind ~= "Keybind" and type(opts.Callback) == "function" then
 			VVindUI._NextControlRegistration += 1
 			api._InitializationCallback = opts.Callback
 			api._RegistrationOrder = VVindUI._NextControlRegistration
 		end
 		api.ValidateConfig = validator or function(value) return ValidateConfigFlag(api, value) end
-		VVindUI.Flags[flag] = api
-		VVindUI.ConfigFlags[flag] = api.Set
-		VVindUI.ConfigValidators[flag] = api.ValidateConfig
+
+		local function wrapSetter(method)
+			local setter = api[method]
+			if type(setter) ~= "function" then return end
+			api[method] = function(control, ...)
+				local previousSource = VVindUI._ChangeSource
+				if previousSource == nil then VVindUI._ChangeSource = "code" end
+				local arguments = table.pack(...)
+				local results = table.pack(pcall(setter, control, ...))
+				VVindUI._ChangeSource = previousSource
+				if not results[1] then error(results[2], 2) end
+				if not group.Syncing then SyncSharedFlag(group, api, arguments[2]) end
+				return table.unpack(results, 2, results.n)
+			end
+		end
+		wrapSetter("Set")
+		if kind == "Keybind" then
+			wrapSetter("SetMode")
+			wrapSetter("SetContext")
+			wrapSetter("SetActive")
+		end
+
+		if existing then
+			local snapshotOk, snapshot = pcall(ReadSharedFlagValue, group.Primary)
+			if not snapshotOk then error("shared flag '" .. flag .. "' cannot read its primary: " .. tostring(snapshot), 2) end
+			group.Syncing = true
+			local applied, applyErr = pcall(api.Set, api, CopyInitialFlagValue(snapshot), true)
+			group.Syncing = false
+			if not applied then error("shared flag '" .. flag .. "' cannot initialize its mirror: " .. tostring(applyErr), 2) end
+			table.insert(group.Controls, api)
+		else
+			VVindUI.Flags[flag] = api
+			VVindUI.ConfigFlags[flag] = api.Set
+			VVindUI.ConfigValidators[flag] = api.ValidateConfig
+			group.InitialValue = CopyInitialFlagValue(api._InitialValue)
+			group.HasInitialValue = api._HasInitialValue
+		end
+
 		local configChangeHook = api.OnStateChanged or api.OnChanged
 		if type(configChangeHook) == "function" then
 			local ok, connection = pcall(configChangeHook, api, function()
+				if api._SharedFlagDestroyed then return end
+				SyncSharedFlag(group, api, false)
 				VVindUI:RefreshEnabledConditions()
-				if not VVindUI._ApplyingConfig and VVindUI.QueueAutoConfigSave then
+				if group.Primary == api and not VVindUI._ApplyingConfig and VVindUI.QueueAutoConfigSave then
 					VVindUI:QueueAutoConfigSave(flag)
 				end
 			end)
 			if ok then api._ConfigChangeConnection = connection end
 		end
+
 		local originalDestroy = api.Destroy
 		if type(originalDestroy) == "function" then
 			api.Destroy = function(self, ...)
+				if self._SharedFlagDestroyed then return end
+				self._SharedFlagDestroyed = true
 				local connection = self._ConfigChangeConnection
-				if connection and type(connection.Disconnect) == "function" then pcall(function() connection:Disconnect() end) end
-				self._ConfigChangeConnection = nil
-				if VVindUI.Flags[flag] == self then
-					VVindUI.Flags[flag] = nil
-					VVindUI.ConfigFlags[flag] = nil
-					VVindUI.ConfigValidators[flag] = nil
+				if connection and type(connection.Disconnect) == "function" then
+					pcall(function() connection:Disconnect() end)
 				end
+				self._ConfigChangeConnection = nil
+				local index = table.find(group.Controls, self)
+				if index then table.remove(group.Controls, index) end
+				if group.Primary == self then
+					local replacement = group.Controls[1]
+					group.Primary = replacement
+					VVindUI.Flags[flag] = replacement
+					VVindUI.ConfigFlags[flag] = replacement and replacement.Set or nil
+					VVindUI.ConfigValidators[flag] = replacement and replacement.ValidateConfig or nil
+					if replacement then
+						replacement._HasInitialValue = group.HasInitialValue
+						replacement._InitialValue = CopyInitialFlagValue(group.InitialValue)
+					end
+				end
+				if #group.Controls == 0 then SharedFlagGroups[flag] = nil end
 				return originalDestroy(self, ...)
 			end
 		end
-		if VVindUI.ApplyAutoConfigFlag then VVindUI:ApplyAutoConfigFlag(flag) end
-		if opts.TextKey or opts.DescriptionKey then
-			VVindUI:LocalizeControl(api, opts)
-		end
-		if opts.EnabledWhen then
-			VVindUI:BindEnabledWhen(api, opts.EnabledWhen, opts.OnEnabledChanged)
-		end
+
+		if not existing and VVindUI.ApplyAutoConfigFlag then VVindUI:ApplyAutoConfigFlag(flag) end
+		if opts.TextKey or opts.DescriptionKey then VVindUI:LocalizeControl(api, opts) end
+		if opts.EnabledWhen then VVindUI:BindEnabledWhen(api, opts.EnabledWhen, opts.OnEnabledChanged) end
 		VVindUI:RefreshEnabledConditions()
 		if VVindUI._RefreshFloatingBindings then VVindUI:_RefreshFloatingBindings() end
 	end
 	return api
 end
- 
+
 function Tab:AddLabel(textOrOptions)
 	local opts = type(textOrOptions) == "table" and textOrOptions or { Text = textOrOptions }
 	local label = Instance.new("TextLabel")
@@ -13268,6 +13352,7 @@ function Tab:AddKeybind(opts)
 			local matches = {}
 			for _, item in ipairs(KeybindControls) do
 				if not item.destroyed and not item.listening and item.mode ~= "Always"
+					and (not item.api or not item.api.Flag or VVindUI.Flags[item.api.Flag] == item.api)
 					and item.key == pressed and KeybindContextActive(item.context) then
 					table.insert(matches, item)
 				end
