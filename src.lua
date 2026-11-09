@@ -292,6 +292,7 @@ function VVindUI:SetLanguage(language)
 	language = string.lower(language)
 	if not self.Locales[language] then return false, "Locale '" .. language .. "' is not registered" end
 	self.Language = language
+	if self._Root then self._Root:SetAttribute("VVindLanguage", language) end
 	RefreshLocalizedEntries()
 	for _, listener in ipairs(LocaleListeners) do
 		if listener.Connected then
@@ -1236,6 +1237,8 @@ local function GetRoot()
  
 	local screenGui = Instance.new("ScreenGui")
 	screenGui.Name = "VVindUI"
+	screenGui:SetAttribute("VVindVersion", VVindUI.Version)
+	screenGui:SetAttribute("VVindLanguage", VVindUI.Language)
 	screenGui.AutoLocalize = false
 	screenGui.ResetOnSpawn = false
 	screenGui.IgnoreGuiInset = false
