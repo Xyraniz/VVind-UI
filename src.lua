@@ -16190,27 +16190,26 @@ end
  
 
 -- Shared drag controller for detachable bubbles and state panels.
-local FloatingWidgetRegistry = {}
-local ActiveFloatingDrag = nil
-local function FloatingColor(value, fallback)
+local FloatingInternals = { Registry = {}, ActiveDrag = nil }
+function FloatingInternals.Color(value, fallback)
 	return typeof(value) == "Color3" and value or fallback
 end
-local function FloatingImage(value)
+function FloatingInternals.Image(value)
 	if type(value) == "number" then return "rbxassetid://" .. tostring(value) end
 	if type(value) == "string" and value:match("^%d+$") then return "rbxassetid://" .. value end
 	if type(value) == "string" then return ResolveIcon(value) end
 	return ""
 end
-local function RegisterFloatingDrag(handle, frame, onTap, draggable, scope, allowOffscreen)
+function FloatingInternals.RegisterDrag(handle, frame, onTap, draggable, scope, allowOffscreen)
 	handle.Active = true
 	scope:Add(handle.InputBegan:Connect(function(input)
-		if ActiveFloatingDrag then return end
+		if FloatingInternals.ActiveDrag then return end
 		if input.UserInputType ~= Enum.UserInputType.MouseButton1
 			and input.UserInputType ~= Enum.UserInputType.Touch then return end
 		local root = VVindUI._Root
 		local scale = GetUIScale()
 		local pos = (frame.AbsolutePosition - root.AbsolutePosition) / scale
-		ActiveFloatingDrag = {
+		FloatingInternals.ActiveDrag = {
 			Input = input,
 			Frame = frame,
 			Start = Vector2.new(input.Position.X, input.Position.Y),
@@ -16222,12 +16221,12 @@ local function RegisterFloatingDrag(handle, frame, onTap, draggable, scope, allo
 		}
 	end))
 	scope:Add(function()
-		if ActiveFloatingDrag and ActiveFloatingDrag.Frame == frame then ActiveFloatingDrag = nil end
+		if FloatingInternals.ActiveDrag and FloatingInternals.ActiveDrag.Frame == frame then FloatingInternals.ActiveDrag = nil end
 	end)
 end
 
 LibJanitor:Add(UserInputService.InputChanged:Connect(function(input)
-	local drag = ActiveFloatingDrag
+	local drag = FloatingInternals.ActiveDrag
 	if not drag or not drag.Draggable then return end
 	local mouse = drag.Input.UserInputType == Enum.UserInputType.MouseButton1
 	if (mouse and input.UserInputType ~= Enum.UserInputType.MouseMovement)
@@ -16250,16 +16249,16 @@ LibJanitor:Add(UserInputService.InputChanged:Connect(function(input)
 	)
 end))
 LibJanitor:Add(UserInputService.InputEnded:Connect(function(input)
-	local drag = ActiveFloatingDrag
+	local drag = FloatingInternals.ActiveDrag
 	if not drag then return end
 	local mouse = drag.Input.UserInputType == Enum.UserInputType.MouseButton1
 	if not (mouse and input.UserInputType == Enum.UserInputType.MouseButton1)
 		and not (not mouse and input == drag.Input) then return end
-	ActiveFloatingDrag = nil
+	FloatingInternals.ActiveDrag = nil
 	if not drag.Moved and drag.Frame.Parent and drag.OnTap then drag.OnTap() end
 end))
 
-local function FloatingScope(opts)
+function FloatingInternals.Scope(opts)
 	local scope = VVindUI:CreateScope()
 	if opts.Window then
 		assert(type(opts.Window.OnDestroy) == "function", "Window must be a VVindUI window")
@@ -16269,7 +16268,7 @@ local function FloatingScope(opts)
 end
 
 function VVindUI:_RefreshFloatingBindings()
-	for widget in pairs(FloatingWidgetRegistry) do
+	for widget in pairs(FloatingInternals.Registry) do
 		if not widget._Destroyed and type(widget.Refresh) == "function" then widget:Refresh() end
 	end
 end
@@ -16278,10 +16277,10 @@ end
 --    Position = UDim2.fromOffset(30, 230), Size = 50, Draggable = true })
 function VVindUI:CreateBubbleToggle(opts)
 	opts = opts or {}
-	local scope = FloatingScope(opts)
+	local scope = FloatingInternals.Scope(opts)
 	local size = math.clamp(tonumber(opts.Size) or 52, 28, 120)
-	local color = FloatingColor(opts.Color, self.Theme.Accent)
-	local inactive = FloatingColor(opts.InactiveColor, self.Theme.Surface)
+	local color = FloatingInternals.Color(opts.Color, self.Theme.Accent)
+	local inactive = FloatingInternals.Color(opts.InactiveColor, self.Theme.Surface)
 	local state = opts.Default == true
 	local bubble = Instance.new("TextButton")
 	bubble.Name = opts.Name or "VVindBubble"
@@ -16298,8 +16297,8 @@ function VVindUI:CreateBubbleToggle(opts)
 	local icon = Instance.new("ImageLabel")
 	icon.Name = "Icon"
 	icon.BackgroundTransparency = 1
-	icon.Image = FloatingImage(opts.Image or opts.AssetId or opts.Icon)
-	icon.ImageColor3 = FloatingColor(opts.IconColor, Color3.new(1, 1, 1))
+	icon.Image = FloatingInternals.Image(opts.Image or opts.AssetId or opts.Icon)
+	icon.ImageColor3 = FloatingInternals.Color(opts.IconColor, Color3.new(1, 1, 1))
 	icon.AnchorPoint = Vector2.new(0.5, 0.5)
 	icon.Position = UDim2.fromScale(0.5, 0.5)
 	icon.Size = UDim2.fromOffset(math.floor(size * 0.52), math.floor(size * 0.52))
@@ -16381,7 +16380,7 @@ function VVindUI:CreateBubbleToggle(opts)
 		inactive = value
 		render()
 	end
-	function widget:SetImage(value) icon.Image = FloatingImage(value) end
+	function widget:SetImage(value) icon.Image = FloatingInternals.Image(value) end
 	function widget:SetVisible(visible) bubble.Visible = visible == true end
 	function widget:SetPosition(position)
 		assert(typeof(position) == "UDim2", "SetPosition expects UDim2")
@@ -16391,17 +16390,17 @@ function VVindUI:CreateBubbleToggle(opts)
 	function widget:Destroy()
 		if self._Destroyed then return end
 		self._Destroyed = true
-		FloatingWidgetRegistry[self] = nil
+		FloatingInternals.Registry[self] = nil
 		if sourceConnection then sourceConnection:Disconnect(); sourceConnection = nil end
 		scope:Destroy()
 	end
 	scope:Add(function()
 		widget._Destroyed = true
-		FloatingWidgetRegistry[widget] = nil
+		FloatingInternals.Registry[widget] = nil
 		if sourceConnection then sourceConnection:Disconnect(); sourceConnection = nil end
 	end)
-	RegisterFloatingDrag(bubble, bubble, function() widget:Set(not state) end, opts.Draggable, scope, true)
-	FloatingWidgetRegistry[widget] = true
+	FloatingInternals.RegisterDrag(bubble, bubble, function() widget:Set(not state) end, opts.Draggable, scope, true)
+	FloatingInternals.Registry[widget] = true
 	scope:Add(VVindUI:OnConfigLoaded(function() widget:Refresh() end))
 	widget:Refresh()
 	return widget
@@ -16419,10 +16418,10 @@ end
 -- Detachable, event-driven state/keybind list. Never polls on Heartbeat.
 function VVindUI:CreateStateList(opts)
 	opts = opts or {}
-	local scope = FloatingScope(opts)
-	local background = FloatingColor(opts.Color, self.Theme.Background)
-	local activeColor = FloatingColor(opts.ActiveColor, self.Theme.Accent)
-	local inactiveColor = FloatingColor(opts.InactiveColor, self.Theme.TextDim)
+	local scope = FloatingInternals.Scope(opts)
+	local background = FloatingInternals.Color(opts.Color, self.Theme.Background)
+	local activeColor = FloatingInternals.Color(opts.ActiveColor, self.Theme.Accent)
+	local inactiveColor = FloatingInternals.Color(opts.InactiveColor, self.Theme.TextDim)
 	local width = math.clamp(tonumber(opts.Width) or 190, 120, 450)
 	local panel = Instance.new("Frame")
 	panel.Name = opts.Name or "VVindStateList"
@@ -16452,7 +16451,7 @@ function VVindUI:CreateStateList(opts)
 	header.BackgroundTransparency = 1
 	header.Text = opts.Title or "Keybinds"
 	header.FontFace = self.Theme.Font
-	header.TextColor3 = FloatingColor(opts.TitleColor, self.Theme.Text)
+	header.TextColor3 = FloatingInternals.Color(opts.TitleColor, self.Theme.Text)
 	header.TextSize = 13
 	header.TextXAlignment = Enum.TextXAlignment.Left
 	header.AutoButtonColor = false
@@ -16503,8 +16502,8 @@ function VVindUI:CreateStateList(opts)
 			if ok then value = result end
 		end
 		local active = boolState(value)
-		local tint = active and FloatingColor(info.Color, activeColor)
-			or FloatingColor(info.InactiveColor, inactiveColor)
+		local tint = active and FloatingInternals.Color(info.Color, activeColor)
+			or FloatingInternals.Color(info.InactiveColor, inactiveColor)
 		entry.Dot.BackgroundColor3 = tint
 		entry.Status.Text = active and tostring(info.ActiveText or "ON") or tostring(info.InactiveText or "OFF")
 		entry.Status.TextColor3 = tint
@@ -16536,7 +16535,7 @@ function VVindUI:CreateStateList(opts)
 		textLabel.Name = "Label"
 		textLabel.BackgroundTransparency = 1
 		textLabel.Text = tostring(info.Text or info.Label or info.Flag or key)
-		textLabel.TextColor3 = FloatingColor(info.TextColor, VVindUI.Theme.Text)
+		textLabel.TextColor3 = FloatingInternals.Color(info.TextColor, VVindUI.Theme.Text)
 		textLabel.FontFace = VVindUI.Theme.FontRegular
 		textLabel.TextSize = 12
 		textLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -16609,7 +16608,7 @@ function VVindUI:CreateStateList(opts)
 	function list:Destroy()
 		if self._Destroyed then return end
 		self._Destroyed = true
-		FloatingWidgetRegistry[self] = nil
+		FloatingInternals.Registry[self] = nil
 		for _, entry in pairs(items) do
 			if entry.Connection then entry.Connection:Disconnect() end
 		end
@@ -16618,21 +16617,21 @@ function VVindUI:CreateStateList(opts)
 	end
 	scope:Add(function()
 		list._Destroyed = true
-		FloatingWidgetRegistry[list] = nil
+		FloatingInternals.Registry[list] = nil
 		for _, entry in pairs(items) do
 			if entry.Connection then entry.Connection:Disconnect() end
 		end
 		table.clear(items)
 	end)
 	local collapsed = false
-	RegisterFloatingDrag(header, panel, function()
+	FloatingInternals.RegisterDrag(header, panel, function()
 		if opts.Collapsible then
 			collapsed = not collapsed
 			for _, entry in pairs(items) do entry.Row.Visible = not collapsed end
 		end
 	end, opts.Draggable, scope)
 	for _, info in ipairs(opts.Items or {}) do list:AddItem(info) end
-	FloatingWidgetRegistry[list] = true
+	FloatingInternals.Registry[list] = true
 	scope:Add(VVindUI:OnConfigLoaded(function() list:Refresh() end))
 	return list
 end
@@ -16689,7 +16688,7 @@ function Tab:AddControls(definitions)
 end
 
 
-local function DestroyAllWindowJanitors()
+function FloatingInternals.DestroyAllWindowJanitors()
 	local windows = table.clone(VVindUI._Windows)
 	for _, win in ipairs(windows) do
 		win._destroyed = true
@@ -16702,7 +16701,7 @@ end
 VVindUI._Root.Destroying:Connect(function()
 	DestroyActiveScopes()
 	AcrylicShuttingDown = true
-	DestroyAllWindowJanitors()
+	FloatingInternals.DestroyAllWindowJanitors()
 	DestroyAllAcrylicControllers()
 	LibJanitor:Destroy()
 end)
@@ -16711,7 +16710,7 @@ function VVindUI:Unload()
 	DestroyActiveScopes()
 	CloseAnyOpenPopup()
 	AcrylicShuttingDown = true
-	DestroyAllWindowJanitors()
+	FloatingInternals.DestroyAllWindowJanitors()
 	DestroyAllAcrylicControllers()
 	LibJanitor:Destroy()
 	if VVindUI._Root then VVindUI._Root:Destroy() end
