@@ -14,6 +14,7 @@ local PlayerGui   = LocalPlayer:WaitForChild("PlayerGui")
 local IsMobileDevice = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
  
 local VVindUI = {}
+local Private = {}
 VVindUI.__index = VVindUI
 VVindUI.Version = "2.13.2"
 VVindUI.Flags = {}
@@ -23,7 +24,7 @@ VVindUI.FlagMigrations = {}
 VVindUI._NextControlRegistration = 0
 VVindUI._Windows = {}
  
-local function GetGlobalTable()
+function Private.GetGlobalTable()
 	local ok, g = pcall(function()
 		if getgenv then return getgenv() end
 		return _G
@@ -32,7 +33,7 @@ local function GetGlobalTable()
 end
  
 do
-	local globalTable = GetGlobalTable()
+	local globalTable = Private.GetGlobalTable()
 	local initialRootOptions = globalTable.__VVindUI_Options
 	VVindUI.RootMode = type(initialRootOptions) == "table" and initialRootOptions.RootMode or "Auto"
 	local previousUnload = globalTable.__VVindUI_Unload or globalTable.__NullUI_Unload
@@ -89,7 +90,7 @@ local ResourceScope = {}
 ResourceScope.__index = ResourceScope
 local ActiveScopes = {}
 
-local function DisposeScopeItem(item, cleanup)
+function Private.DisposeScopeItem(item, cleanup)
 	if type(cleanup) == "function" then
 		pcall(cleanup, item)
 		return
@@ -111,7 +112,7 @@ end
 
 function ResourceScope:Add(item, cleanup)
 	if self._destroyed then
-		DisposeScopeItem(item, cleanup)
+		Private.DisposeScopeItem(item, cleanup)
 	else
 		table.insert(self._items, { Item = item, Cleanup = cleanup })
 	end
@@ -123,7 +124,7 @@ function ResourceScope:Remove(item, dispose)
 		local entry = self._items[i]
 		if entry.Item == item then
 			table.remove(self._items, i)
-			if dispose then DisposeScopeItem(entry.Item, entry.Cleanup) end
+			if dispose then Private.DisposeScopeItem(entry.Item, entry.Cleanup) end
 			return true
 		end
 	end
@@ -137,7 +138,7 @@ function ResourceScope:Destroy()
 	for i = #self._items, 1, -1 do
 		local entry = self._items[i]
 		self._items[i] = nil
-		DisposeScopeItem(entry.Item, entry.Cleanup)
+		Private.DisposeScopeItem(entry.Item, entry.Cleanup)
 	end
 end
 
@@ -147,7 +148,7 @@ function VVindUI:CreateScope()
 	return scope
 end
 
-local function DestroyActiveScopes()
+function Private.DestroyActiveScopes()
 	local scopes = {}
 	for scope in pairs(ActiveScopes) do table.insert(scopes, scope) end
 	for _, scope in ipairs(scopes) do scope:Destroy() end
@@ -189,7 +190,7 @@ VVindUI.Locales = {
 	},
 }
 
-local function IsValidTranslation(value)
+function Private.IsValidTranslation(value)
 	if type(value) == "string" then return true end
 	if type(value) ~= "table" or type(value.other) ~= "string" then return false end
 	for key, translation in pairs(value) do
@@ -313,7 +314,7 @@ function VVindUI:RegisterLocale(language, translations)
 	language = string.lower(language)
 	local locale = self.Locales[language] or {}
 	for key, value in pairs(translations) do
-		assert(type(key) == "string" and IsValidTranslation(value), "translation values must be strings or plural tables with a string 'other' value")
+		assert(type(key) == "string" and Private.IsValidTranslation(value), "translation values must be strings or plural tables with a string 'other' value")
 		locale[key] = value
 	end
 	self.Locales[language] = locale
@@ -337,7 +338,7 @@ function VVindUI:ValidateLocale(language, referenceLanguage)
 		if locale[key] == nil then
 			-- English is the identity locale, so untranslated source strings are valid.
 			if language ~= "en" then table.insert(report.Missing, key) end
-		elseif not IsValidTranslation(locale[key]) then
+		elseif not Private.IsValidTranslation(locale[key]) then
 			table.insert(report.Invalid, key)
 		end
 	end
@@ -367,7 +368,7 @@ VVindUI.register_locale = VVindUI.RegisterLocale
 VVindUI.validate_locale = VVindUI.ValidateLocale
 VVindUI.register_locale_callback = VVindUI.RegisterLocaleCallback
 
-local function TrackLocalizedInstance(instance)
+function Private.TrackLocalizedInstance(instance)
 	if instance:IsA("GuiBase2d") then instance.AutoLocalize = false end
 	if not instance:IsA("TextLabel") and not instance:IsA("TextButton") and not instance:IsA("TextBox") then return end
 	local ok, text = pcall(function() return instance.Text end)
@@ -388,10 +389,10 @@ local function TrackLocalizedInstance(instance)
 	end
 end
 
-local function TrackLocalizationRoot(root)
+function Private.TrackLocalizationRoot(root)
 	root.AutoLocalize = false
-	for _, instance in ipairs(root:GetDescendants()) do TrackLocalizedInstance(instance) end
-	LibJanitor:Add(root.DescendantAdded:Connect(TrackLocalizedInstance))
+	for _, instance in ipairs(root:GetDescendants()) do Private.TrackLocalizedInstance(instance) end
+	LibJanitor:Add(root.DescendantAdded:Connect(Private.TrackLocalizedInstance))
 end
  
 local function MakeSignal()
@@ -458,46 +459,46 @@ local function FormatNumber(v)
 	return string.format("%.4g", v)
 end
  
-local ACRYLIC_DOF_NAME = "VVindUI_AcrylicDOF"
-local ACRYLIC_DISTANCE = 0.001
-local ACRYLIC_TRANSPARENCY = 0.98
-local AcrylicDOF = nil
+Private.ACRYLIC_DOF_NAME = "VVindUI_AcrylicDOF"
+Private.ACRYLIC_DISTANCE = 0.001
+Private.ACRYLIC_TRANSPARENCY = 0.98
+Private.AcrylicDOF = nil
 local AcrylicControllers = {}
-local CameraConnections = {}
-local AcrylicShuttingDown = false
+Private.CameraConnections = {}
+Private.AcrylicShuttingDown = false
  
 VVindUI.Config = { Blur = true, MaxNotifications = 5 }
  
-local function DisconnectCameraSignals()
-	for i = #CameraConnections, 1, -1 do
-		CameraConnections[i]:Disconnect()
-		CameraConnections[i] = nil
+function Private.DisconnectCameraSignals()
+	for i = #Private.CameraConnections, 1, -1 do
+		Private.CameraConnections[i]:Disconnect()
+		Private.CameraConnections[i] = nil
 	end
 end
  
-local function EnsureAcrylicDOF()
-	if AcrylicDOF and AcrylicDOF.Parent then return AcrylicDOF end
-	local stale = Lighting:FindFirstChild(ACRYLIC_DOF_NAME)
+function Private.EnsureAcrylicDOF()
+	if Private.AcrylicDOF and Private.AcrylicDOF.Parent then return Private.AcrylicDOF end
+	local stale = Lighting:FindFirstChild(Private.ACRYLIC_DOF_NAME)
 	if stale then stale:Destroy() end
 	local previousDof = Lighting:FindFirstChild("NullUI_AcrylicDOF")
 	if previousDof then previousDof:Destroy() end
  
 	local dof = Instance.new("DepthOfFieldEffect")
-	dof.Name = ACRYLIC_DOF_NAME
+	dof.Name = Private.ACRYLIC_DOF_NAME
 	dof.FarIntensity = 0
 	dof.FocusDistance = 0.05
 	dof.InFocusRadius = 0.1
 	dof.NearIntensity = 1
 	dof.Enabled = false
 	dof.Parent = Lighting
-	AcrylicDOF = dof
+	Private.AcrylicDOF = dof
 	LibJanitor:Add(dof)
 	return dof
 end
  
-local function RefreshAcrylicEffect()
-	if AcrylicShuttingDown then return end
-	local dof = EnsureAcrylicDOF()
+function Private.RefreshAcrylicEffect()
+	if Private.AcrylicShuttingDown then return end
+	local dof = Private.EnsureAcrylicDOF()
 	dof.Enabled = VVindUI.Config.Blur ~= false and #AcrylicControllers > 0
 end
  
@@ -512,12 +513,12 @@ local function UpdateAllAcrylic()
 	end
 end
  
-local function BindAcrylicCamera(camera)
-	DisconnectCameraSignals()
+function Private.BindAcrylicCamera(camera)
+	Private.DisconnectCameraSignals()
 	if not camera then return end
  
 	local function connect(property)
-		table.insert(CameraConnections,
+		table.insert(Private.CameraConnections,
 			camera:GetPropertyChangedSignal(property):Connect(UpdateAllAcrylic))
 	end
 	connect("CFrame")
@@ -526,7 +527,7 @@ local function BindAcrylicCamera(camera)
 	UpdateAllAcrylic()
 end
  
-local function CreateWindowAcrylic(guiObject)
+function Private.CreateWindowAcrylic(guiObject)
 	local folder = Instance.new("Folder")
 	folder.Name = "VVindUI_AcrylicWindow"
  
@@ -577,7 +578,7 @@ local function CreateWindowAcrylic(guiObject)
 		local size = gui.AbsoluteSize
 		local visible = VVindUI.Config.Blur ~= false
 			and gui.Visible and size.X > 2 and size.Y > 2
-		self.Part.Transparency = visible and ACRYLIC_TRANSPARENCY or 1
+		self.Part.Transparency = visible and Private.ACRYLIC_TRANSPARENCY or 1
 		if not visible then return end
  
 		local edgeInset = math.clamp(camera.ViewportSize.Y * 0.012, 8, 18)
@@ -589,7 +590,7 @@ local function CreateWindowAcrylic(guiObject)
  
 		local function ScreenToWorld(point)
 			local ray = camera:ScreenPointToRay(point.X, point.Y)
-			return ray.Origin + ray.Direction * ACRYLIC_DISTANCE
+			return ray.Origin + ray.Direction * Private.ACRYLIC_DISTANCE
 		end
  
 		local topLeft3D = ScreenToWorld(position)
@@ -618,7 +619,7 @@ local function CreateWindowAcrylic(guiObject)
 		local index = table.find(AcrylicControllers, self)
 		if index then table.remove(AcrylicControllers, index) end
 		if self.Folder then self.Folder:Destroy() end
-		RefreshAcrylicEffect()
+		Private.RefreshAcrylicEffect()
 	end
  
 	for _, property in ipairs({ "AbsolutePosition", "AbsoluteSize", "Visible" }) do
@@ -632,26 +633,26 @@ local function CreateWindowAcrylic(guiObject)
 	end))
  
 	table.insert(AcrylicControllers, controller)
-	RefreshAcrylicEffect()
+	Private.RefreshAcrylicEffect()
 	controller:Update()
 	return controller
 end
  
-BindAcrylicCamera(workspace.CurrentCamera)
+Private.BindAcrylicCamera(workspace.CurrentCamera)
 LibJanitor:Add(workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
-	BindAcrylicCamera(workspace.CurrentCamera)
+	Private.BindAcrylicCamera(workspace.CurrentCamera)
 end))
 LibJanitor:Add(function()
-	DisconnectCameraSignals()
+	Private.DisconnectCameraSignals()
 end)
  
 function VVindUI:SetBlurEnabled(enabled)
 	VVindUI.Config.Blur = enabled and true or false
-	RefreshAcrylicEffect()
+	Private.RefreshAcrylicEffect()
 	UpdateAllAcrylic()
 end
  
-local function DestroyAllAcrylicControllers()
+function Private.DestroyAllAcrylicControllers()
 	for index = #AcrylicControllers, 1, -1 do
 		AcrylicControllers[index]:Destroy()
 	end
@@ -680,43 +681,43 @@ local function hasFn(name)
 	return nil
 end
  
-local fn_isfolder    = hasFn("isfolder")
-local fn_makefolder  = hasFn("makefolder")
+Private.fn_isfolder    = hasFn("isfolder")
+Private.fn_makefolder  = hasFn("makefolder")
 local fn_isfile      = hasFn("isfile")
 local fn_writefile   = hasFn("writefile")
 local fn_readfile    = hasFn("readfile")
 local fn_delfile     = hasFn("delfile")
-local fn_listfiles   = hasFn("listfiles")
-local fn_customasset = hasFn("getcustomasset") or hasFn("getsynasset")
+Private.fn_listfiles   = hasFn("listfiles")
+Private.fn_customasset = hasFn("getcustomasset") or hasFn("getsynasset")
  
-local function EnsureAssetsFolder()
-	if not (fn_isfolder and fn_makefolder) then return false end
+function Private.EnsureAssetsFolder()
+	if not (Private.fn_isfolder and Private.fn_makefolder) then return false end
 	local function ensure(path)
-		local existsOk, exists = pcall(fn_isfolder, path)
+		local existsOk, exists = pcall(Private.fn_isfolder, path)
 		if existsOk and exists then return true end
-		pcall(fn_makefolder, path)
-		local verifyOk, nowExists = pcall(fn_isfolder, path)
+		pcall(Private.fn_makefolder, path)
+		local verifyOk, nowExists = pcall(Private.fn_isfolder, path)
 		return verifyOk and nowExists == true
 	end
 	return ensure(STORAGE_FOLDER) and ensure(ASSETS_FOLDER)
 end
  
-local function PrivateTabFlagPath(name)
+function Private.PrivateTabFlagPath(name)
 	local safe = tostring(name or ""):gsub("[^%w_%-]", "_")
 	return STORAGE_FOLDER .. "/PrivateTab_" .. safe .. ".remember"
 end
 
-local function IsPrivateTabRemembered(name)
+function Private.IsPrivateTabRemembered(name)
 	if not fn_isfile then return false end
-	local ok, exists = pcall(fn_isfile, PrivateTabFlagPath(name))
+	local ok, exists = pcall(fn_isfile, Private.PrivateTabFlagPath(name))
 	return ok and exists == true
 end
  
-local function SetPrivateTabRemembered(name, remember)
-	local path = PrivateTabFlagPath(name)
+function Private.SetPrivateTabRemembered(name, remember)
+	local path = Private.PrivateTabFlagPath(name)
 	if remember then
 		if not fn_writefile then return end
-		EnsureAssetsFolder()
+		Private.EnsureAssetsFolder()
 		pcall(fn_writefile, path, "1")
 	else
 		if not (fn_isfile and fn_delfile) then return end
@@ -725,7 +726,7 @@ local function SetPrivateTabRemembered(name, remember)
 	end
 end
  
-local function GetExecutorName()
+function Private.GetExecutorName()
 	local ok, name, version = pcall(function()
 		if identifyexecutor then return identifyexecutor() end
 		if getexecutorname then return getexecutorname() end
@@ -738,7 +739,7 @@ local function GetExecutorName()
 	return "Unknown"
 end
  
-local function FormatClock(minutesAfterMidnight)
+function Private.FormatClock(minutesAfterMidnight)
 	minutesAfterMidnight = minutesAfterMidnight or 0
 	local h = math.floor(minutesAfterMidnight / 60) % 24
 	local m = math.floor(minutesAfterMidnight % 60)
@@ -748,7 +749,7 @@ local function FormatClock(minutesAfterMidnight)
 	return string.format("%02d:%02d %s", h12, m, suffix)
 end
  
-local function LooksLikeFontFile(data)
+function Private.LooksLikeFontFile(data)
 	if type(data) ~= "string" or #data < 4096 then return false end
 	local sig = data:sub(1, 4)
 	return sig == "\0\1\0\0"
@@ -759,13 +760,13 @@ local function LooksLikeFontFile(data)
 		or sig == "wOF2"
 end
  
-local function DownloadFontFile(path, url)
+function Private.DownloadFontFile(path, url)
 	if not (fn_isfile and fn_writefile) then return false end
  
 	local cached = nil
 	if fn_isfile(path) and fn_readfile then
 		local ok, data = pcall(fn_readfile, path)
-		if ok and LooksLikeFontFile(data) then
+		if ok and Private.LooksLikeFontFile(data) then
 			return true
 		end
 		cached = ok and data or nil
@@ -776,7 +777,7 @@ local function DownloadFontFile(path, url)
 	end
  
 	local ok, body = pcall(function() return game:HttpGet(url) end)
-	if not ok or not LooksLikeFontFile(body) then
+	if not ok or not Private.LooksLikeFontFile(body) then
 		return false
 	end
  
@@ -784,20 +785,20 @@ local function DownloadFontFile(path, url)
 	return wrote
 end
  
-local function LoadCustomFigtree()
-	if not (fn_customasset and fn_writefile) then return nil end
+function Private.LoadCustomFigtree()
+	if not (Private.fn_customasset and fn_writefile) then return nil end
  
-	local okFolder = EnsureAssetsFolder()
+	local okFolder = Private.EnsureAssetsFolder()
 	if not okFolder then return nil end
  
 	local base = "https://raw.githubusercontent.com/Skinny-yz/NullUI-Assets/main/fonts/"
 	local semiPath = ASSETS_FOLDER .. "/Figtree-SemiBold.ttf"
 	local regPath  = ASSETS_FOLDER .. "/Figtree-Medium.ttf"
  
-	if not DownloadFontFile(semiPath, base .. "Figtree-SemiBold.ttf") then
+	if not Private.DownloadFontFile(semiPath, base .. "Figtree-SemiBold.ttf") then
 		return nil
 	end
-	local hasRegular = DownloadFontFile(regPath, base .. "Figtree-Medium.ttf")
+	local hasRegular = Private.DownloadFontFile(regPath, base .. "Figtree-Medium.ttf")
 	if not hasRegular then regPath = semiPath end
  
 	local result = nil
@@ -805,14 +806,14 @@ local function LoadCustomFigtree()
 		local family = {
 			name = "Figtree",
 			faces = {
-				{ name = "Regular",  weight = 400, style = "normal", assetId = fn_customasset(regPath) },
-				{ name = "SemiBold", weight = 600, style = "normal", assetId = fn_customasset(semiPath) },
+				{ name = "Regular",  weight = 400, style = "normal", assetId = Private.fn_customasset(regPath) },
+				{ name = "SemiBold", weight = 600, style = "normal", assetId = Private.fn_customasset(semiPath) },
 			},
 		}
 		local familyPath = ASSETS_FOLDER .. "/Figtree.font"
 		fn_writefile(familyPath, HttpService:JSONEncode(family))
  
-		local asset = fn_customasset(familyPath)
+		local asset = Private.fn_customasset(familyPath)
 		result = {
 			Regular  = Font.new(asset, Enum.FontWeight.Regular,  Enum.FontStyle.Normal),
 			SemiBold = Font.new(asset, Enum.FontWeight.SemiBold, Enum.FontStyle.Normal),
@@ -822,8 +823,8 @@ local function LoadCustomFigtree()
 	return result
 end
  
-local function LoadFonts()
-	local custom = LoadCustomFigtree()
+function Private.LoadFonts()
+	local custom = Private.LoadCustomFigtree()
 	if custom and custom.Regular and custom.SemiBold then
 		return custom
 	end
@@ -842,7 +843,7 @@ local function LoadFonts()
 	}
 end
  
-local Fonts = LoadFonts()
+local Fonts = Private.LoadFonts()
  
 VVindUI.Theme = {
 	Background     = Color3.fromRGB(16, 16, 16),
@@ -909,7 +910,7 @@ local function Stroke(parent, color, thickness, transparency)
 	return s
 end
  
-local function GlassLayer(parent, radius, transparency)
+function Private.GlassLayer(parent, radius, transparency)
 	local glass = Instance.new("Frame")
 	glass.Name = "Glass"
 	glass.Size = UDim2.fromScale(1, 1)
@@ -922,52 +923,52 @@ local function GlassLayer(parent, radius, transparency)
 	return glass
 end
 
-local function SameColor(a, b)
+function Private.SameColor(a, b)
 	return typeof(a) == "Color3" and typeof(b) == "Color3"
 		and a.R == b.R and a.G == b.G and a.B == b.B
 end
 
-local function IsNeutralColor(value)
+function Private.IsNeutralColor(value)
 	return typeof(value) == "Color3"
 		and value.R > 0.05 and value.R <= 1
 		and math.abs(value.R - value.G) < 0.002
 		and math.abs(value.G - value.B) < 0.002
 end
 
-local function RecolorThemeValue(instance, property, value, oldTheme)
+function Private.RecolorThemeValue(instance, property, value, oldTheme)
 	if typeof(value) ~= "Color3" then return nil end
 	if property == "StrokeColor" then
-		if SameColor(value, oldTheme.Accent) then return VVindUI.Theme.Accent end
-		if SameColor(value, oldTheme.Border) or IsNeutralColor(value) then
+		if Private.SameColor(value, oldTheme.Accent) then return VVindUI.Theme.Accent end
+		if Private.SameColor(value, oldTheme.Border) or Private.IsNeutralColor(value) then
 			return VVindUI.Theme.Border
 		end
 	elseif property == "BackgroundColor3" then
-		if SameColor(value, oldTheme.Background) then return VVindUI.Theme.Background end
-		if SameColor(value, oldTheme.Surface) then return VVindUI.Theme.Surface end
-		if SameColor(value, oldTheme.SurfaceHover) then return VVindUI.Theme.SurfaceHover end
-		if SameColor(value, oldTheme.Accent) then return VVindUI.Theme.Accent end
-		if SameColor(value, oldTheme.Text) then return VVindUI.Theme.Text end
-		if SameColor(value, oldTheme.TextDim) then return VVindUI.Theme.Surface end
-		if IsNeutralColor(value) then
+		if Private.SameColor(value, oldTheme.Background) then return VVindUI.Theme.Background end
+		if Private.SameColor(value, oldTheme.Surface) then return VVindUI.Theme.Surface end
+		if Private.SameColor(value, oldTheme.SurfaceHover) then return VVindUI.Theme.SurfaceHover end
+		if Private.SameColor(value, oldTheme.Accent) then return VVindUI.Theme.Accent end
+		if Private.SameColor(value, oldTheme.Text) then return VVindUI.Theme.Text end
+		if Private.SameColor(value, oldTheme.TextDim) then return VVindUI.Theme.Surface end
+		if Private.IsNeutralColor(value) then
 			return value.R < 0.12 and VVindUI.Theme.Background or VVindUI.Theme.Surface
 		end
 	elseif property == "TextColor3" or property == "ImageColor3" then
-		if SameColor(value, oldTheme.Background) then return VVindUI.Theme.Background end
-		if SameColor(value, oldTheme.Surface) then return VVindUI.Theme.Surface end
-		if SameColor(value, oldTheme.SurfaceHover) then return VVindUI.Theme.TextDim end
-		if SameColor(value, oldTheme.Text) then return VVindUI.Theme.Text end
-		if SameColor(value, oldTheme.TextDim) then return VVindUI.Theme.TextDim end
-		if SameColor(value, oldTheme.Danger) then return VVindUI.Theme.Danger end
-		if SameColor(value, oldTheme.Accent) then return VVindUI.Theme.Accent end
-		if IsNeutralColor(value) then
+		if Private.SameColor(value, oldTheme.Background) then return VVindUI.Theme.Background end
+		if Private.SameColor(value, oldTheme.Surface) then return VVindUI.Theme.Surface end
+		if Private.SameColor(value, oldTheme.SurfaceHover) then return VVindUI.Theme.TextDim end
+		if Private.SameColor(value, oldTheme.Text) then return VVindUI.Theme.Text end
+		if Private.SameColor(value, oldTheme.TextDim) then return VVindUI.Theme.TextDim end
+		if Private.SameColor(value, oldTheme.Danger) then return VVindUI.Theme.Danger end
+		if Private.SameColor(value, oldTheme.Accent) then return VVindUI.Theme.Accent end
+		if Private.IsNeutralColor(value) then
 			return value.R >= 0.92 and VVindUI.Theme.Text or VVindUI.Theme.TextDim
 		end
 	elseif property == "GradientColor" then
-		if SameColor(value, oldTheme.Accent) then return VVindUI.Theme.Accent end
-		if SameColor(value, oldTheme.SurfaceHover) then return VVindUI.Theme.SurfaceHover end
-		if SameColor(value, oldTheme.Text) then return VVindUI.Theme.Text end
-		if SameColor(value, oldTheme.TextDim) then return VVindUI.Theme.TextDim end
-		if IsNeutralColor(value) then
+		if Private.SameColor(value, oldTheme.Accent) then return VVindUI.Theme.Accent end
+		if Private.SameColor(value, oldTheme.SurfaceHover) then return VVindUI.Theme.SurfaceHover end
+		if Private.SameColor(value, oldTheme.Text) then return VVindUI.Theme.Text end
+		if Private.SameColor(value, oldTheme.TextDim) then return VVindUI.Theme.TextDim end
+		if Private.IsNeutralColor(value) then
 			return value.R >= 0.92 and VVindUI.Theme.Text or VVindUI.Theme.TextDim
 		end
 	end
@@ -1010,17 +1011,17 @@ function VVindUI:SetTheme(patch)
 		for _, property in ipairs(colorProperties) do
 			local ok, value = pcall(function() return instance[property] end)
 			if ok then
-				local color = RecolorThemeValue(instance, property, value, oldTheme)
+				local color = Private.RecolorThemeValue(instance, property, value, oldTheme)
 				if color then pcall(function() instance[property] = color end) end
 			end
 		end
 		if not colorExempt and instance:IsA("UIStroke") then
-			local color = RecolorThemeValue(instance, "StrokeColor", instance.Color, oldTheme)
+			local color = Private.RecolorThemeValue(instance, "StrokeColor", instance.Color, oldTheme)
 			if color then instance.Color = color end
 		elseif not colorExempt and instance:IsA("UIGradient") then
 			local keypoints = {}
 			for _, keypoint in ipairs(instance.Color.Keypoints) do
-				local color = RecolorThemeValue(instance, "GradientColor", keypoint.Value, oldTheme) or keypoint.Value
+				local color = Private.RecolorThemeValue(instance, "GradientColor", keypoint.Value, oldTheme) or keypoint.Value
 				table.insert(keypoints, ColorSequenceKeypoint.new(keypoint.Time, color))
 			end
 			instance.Color = ColorSequence.new(keypoints)
@@ -1045,7 +1046,7 @@ local function AddScrollbar(scroll)
 	scroll.HorizontalScrollBarInset = Enum.ScrollBarInset.None
 end
  
-local function AddContentScrollThumb(scroll, listLayout, thumbParent, janitor)
+function Private.AddContentScrollThumb(scroll, listLayout, thumbParent, janitor)
 	local thumb = Instance.new("Frame")
 	thumb.Name = "ContentScrollThumb"
 	thumb.BackgroundColor3 = VVindUI.Theme.TextDim
@@ -1095,14 +1096,14 @@ local function AddContentScrollThumb(scroll, listLayout, thumbParent, janitor)
 	return thumb
 end
  
-local MEASURE_FUDGE = 1.06
-local MeasureCache = {}
+Private.MEASURE_FUDGE = 1.06
+Private.MeasureCache = {}
  
 local function MeasureText(text, size, maxWidth)
 	text = tostring(text or "")
 	maxWidth = maxWidth or 10000
 	local key = text .. "\1" .. size .. "\1" .. math.floor(maxWidth) .. "\1" .. tostring(VVindUI.Theme.MeasureFont)
-	local cached = MeasureCache[key]
+	local cached = Private.MeasureCache[key]
 	if cached then return cached.X, cached.Y end
  
 	local ok, bounds = pcall(function()
@@ -1113,17 +1114,17 @@ local function MeasureText(text, size, maxWidth)
 	end)
 	local w, h
 	if ok and bounds then
-		w = math.ceil(bounds.X * MEASURE_FUDGE)
+		w = math.ceil(bounds.X * Private.MEASURE_FUDGE)
 		h = math.ceil(bounds.Y)
 	else
 		w = math.ceil(#text * size * 0.55)
 		h = size + 2
 	end
-	MeasureCache[key] = Vector2.new(w, h)
+	Private.MeasureCache[key] = Vector2.new(w, h)
 	return w, h
 end
  
-local IconSources = {
+Private.IconSources = {
 	Material = "https://raw.githubusercontent.com/Skinny-yz/NullUI-Assets/main/icons/MaterialIcons.luau",
 	Lucide   = "https://raw.githubusercontent.com/Skinny-yz/NullUI-Assets/main/icons/LucideIcons.luau",
 	Phosphor = "https://raw.githubusercontent.com/Skinny-yz/NullUI-Assets/main/icons/Phosphor.luau",
@@ -1131,40 +1132,40 @@ local IconSources = {
 	SF       = "https://raw.githubusercontent.com/Skinny-yz/NullUI-Assets/main/icons/SFSymbols.luau",
 }
  
-local IconCache = {}
-local IconLoading = {}
+Private.IconCache = {}
+Private.IconLoading = {}
  
 local function LoadIconSource(source)
-	if IconCache[source] ~= nil then
-		return IconCache[source] or nil
+	if Private.IconCache[source] ~= nil then
+		return Private.IconCache[source] or nil
 	end
  
-	if IconLoading[source] then
+	if Private.IconLoading[source] then
 		local t0 = os.clock()
-		while IconLoading[source] and os.clock() - t0 < 10 do
+		while Private.IconLoading[source] and os.clock() - t0 < 10 do
 			task.wait()
 		end
-		return IconCache[source] or nil
+		return Private.IconCache[source] or nil
 	end
  
-	local url = IconSources[source]
+	local url = Private.IconSources[source]
 	if not url then
-		IconCache[source] = false
+		Private.IconCache[source] = false
 		return nil
 	end
  
-	IconLoading[source] = true
+	Private.IconLoading[source] = true
 	local ok, data = pcall(function()
 		return loadstring(game:HttpGet(url))()
 	end)
-	IconLoading[source] = nil
+	Private.IconLoading[source] = nil
  
 	if ok and type(data) == "table" then
-		IconCache[source] = data
+		Private.IconCache[source] = data
 		return data
 	end
  
-	IconCache[source] = false
+	Private.IconCache[source] = false
 	return nil
 end
  
@@ -1194,7 +1195,7 @@ function VVindUI:PreloadIcons(sources)
 	end
 end
  
-local function ResolveRootParent(mode)
+function Private.ResolveRootParent(mode)
 	if mode ~= "Auto" and mode ~= "PlayerGui" and mode ~= "Hidden" then
 		return nil, "RootMode must be Auto, PlayerGui or Hidden"
 	end
@@ -1209,7 +1210,7 @@ local function ResolveRootParent(mode)
 end
 
 function VVindUI:SetRootMode(mode)
-	local parent, err = ResolveRootParent(mode)
+	local parent, err = Private.ResolveRootParent(mode)
 	if not parent then return false, err end
 	local root = self._Root
 	if root and root.Parent ~= parent then
@@ -1222,8 +1223,8 @@ function VVindUI:SetRootMode(mode)
 	return true
 end
 
-local function GetRoot()
-	local parent, err = ResolveRootParent(VVindUI.RootMode)
+function Private.GetRoot()
+	local parent, err = Private.ResolveRootParent(VVindUI.RootMode)
 	if not parent then
 		warn("[VindUI] " .. tostring(err) .. "; using PlayerGui")
 		parent = PlayerGui
@@ -1245,13 +1246,13 @@ local function GetRoot()
 	screenGui.DisplayOrder = 9999
 	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	screenGui.Parent = parent
-	TrackLocalizationRoot(screenGui)
+	Private.TrackLocalizationRoot(screenGui)
 	return screenGui
 end
  
-VVindUI._Root = GetRoot()
+VVindUI._Root = Private.GetRoot()
  
-local function ViewportSize()
+function Private.ViewportSize()
 	local root = VVindUI._Root
 	if root and root.AbsoluteSize.X > 0 then
 		return root.AbsoluteSize
@@ -1260,47 +1261,47 @@ local function ViewportSize()
 	return cam and cam.ViewportSize or Vector2.new(1280, 720)
 end
  
-local UI_SCALE_BASELINE = IsMobileDevice and 380 or 720
-local UI_SCALE_MIN = IsMobileDevice and 1.0 or 0.75
-local UI_SCALE_MAX = IsMobileDevice and 1.5 or 1.35
+Private.UI_SCALE_BASELINE = IsMobileDevice and 380 or 720
+Private.UI_SCALE_MIN = IsMobileDevice and 1.0 or 0.75
+Private.UI_SCALE_MAX = IsMobileDevice and 1.5 or 1.35
  
-local function ComputeUIScale()
-	return SafeClamp(ViewportSize().Y / UI_SCALE_BASELINE, UI_SCALE_MIN, UI_SCALE_MAX)
+function Private.ComputeUIScale()
+	return SafeClamp(Private.ViewportSize().Y / Private.UI_SCALE_BASELINE, Private.UI_SCALE_MIN, Private.UI_SCALE_MAX)
 end
  
 local GlobalScale = Instance.new("UIScale")
 GlobalScale.Name = "GlobalScale"
-GlobalScale.Scale = ComputeUIScale()
+GlobalScale.Scale = Private.ComputeUIScale()
 GlobalScale.Parent = VVindUI._Root
  
 local function GetUIScale()
 	return GlobalScale.Scale
 end
  
-local function RefreshUIScale()
-	GlobalScale.Scale = ComputeUIScale()
+function Private.RefreshUIScale()
+	GlobalScale.Scale = Private.ComputeUIScale()
 end
  
-local function WatchCamera(cam)
+function Private.WatchCamera(cam)
 	if not cam then return end
-	LibJanitor:Add(cam:GetPropertyChangedSignal("ViewportSize"):Connect(RefreshUIScale))
+	LibJanitor:Add(cam:GetPropertyChangedSignal("ViewportSize"):Connect(Private.RefreshUIScale))
 end
  
-WatchCamera(workspace.CurrentCamera)
+Private.WatchCamera(workspace.CurrentCamera)
 LibJanitor:Add(workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
-	WatchCamera(workspace.CurrentCamera)
-	RefreshUIScale()
+	Private.WatchCamera(workspace.CurrentCamera)
+	Private.RefreshUIScale()
 end))
  
 function VVindUI:SetScaleRange(minScale, maxScale)
-	UI_SCALE_MIN = minScale or UI_SCALE_MIN
-	UI_SCALE_MAX = maxScale or UI_SCALE_MAX
-	RefreshUIScale()
+	Private.UI_SCALE_MIN = minScale or Private.UI_SCALE_MIN
+	Private.UI_SCALE_MAX = maxScale or Private.UI_SCALE_MAX
+	Private.RefreshUIScale()
 end
  
 local ActivePopupClose = nil
  
-local function RegisterPopupOpen(closeFn)
+function Private.RegisterPopupOpen(closeFn)
 	if ActivePopupClose and ActivePopupClose ~= closeFn then
 		local previous = ActivePopupClose
 		ActivePopupClose = nil
@@ -1309,13 +1310,13 @@ local function RegisterPopupOpen(closeFn)
 	ActivePopupClose = closeFn
 end
  
-local function RegisterPopupClose(closeFn)
+function Private.RegisterPopupClose(closeFn)
 	if ActivePopupClose == closeFn then
 		ActivePopupClose = nil
 	end
 end
  
-local function CloseAnyOpenPopup()
+function Private.CloseAnyOpenPopup()
 	if ActivePopupClose then
 		local fn = ActivePopupClose
 		ActivePopupClose = nil
@@ -1323,7 +1324,7 @@ local function CloseAnyOpenPopup()
 	end
 end
  
-local function MakePopupBackdrop(onClose)
+function Private.MakePopupBackdrop(onClose)
 	local backdrop = Instance.new("TextButton")
 	backdrop.Name = "PopupBackdrop"
 	backdrop.Text = ""
@@ -1345,23 +1346,23 @@ end
 LibJanitor:Add(UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	if gameProcessed then return end
 	if input.KeyCode == Enum.KeyCode.Escape and ActivePopupClose then
-		CloseAnyOpenPopup()
+		Private.CloseAnyOpenPopup()
 	end
 end))
  
 local KeybindCapturing = false
-local KeybindCaptureStop = nil
+Private.KeybindCaptureStop = nil
 local KeybindControls = {}
 local ActiveKeybindContext = "global"
-local KeybindInputHandlersInstalled = false
+Private.KeybindInputHandlersInstalled = false
 
-local KeybindMouseAliases = {
+Private.KeybindMouseAliases = {
 	m1 = Enum.UserInputType.MouseButton1, mouse1 = Enum.UserInputType.MouseButton1, mb1 = Enum.UserInputType.MouseButton1,
 	m2 = Enum.UserInputType.MouseButton2, mouse2 = Enum.UserInputType.MouseButton2, mb2 = Enum.UserInputType.MouseButton2,
 	m3 = Enum.UserInputType.MouseButton3, mouse3 = Enum.UserInputType.MouseButton3, mb3 = Enum.UserInputType.MouseButton3,
 }
 
-local function ResolveKeybindKey(value)
+function Private.ResolveKeybindKey(value)
 	if value == nil or value == "" or value == "NONE" or value == "None" then return nil end
 	if typeof(value) == "EnumItem" then
 		if value.EnumType == Enum.KeyCode and value ~= Enum.KeyCode.Unknown then return value end
@@ -1373,7 +1374,7 @@ local function ResolveKeybindKey(value)
 	end
 	if type(value) ~= "string" then return nil, "expected an EnumItem, key name, or nil" end
 
-	local alias = KeybindMouseAliases[string.lower(value):gsub("%s", "")]
+	local alias = Private.KeybindMouseAliases[string.lower(value):gsub("%s", "")]
 	if alias then return alias end
 	local enumType, keyName = value:match("^Enum%.([%w_]+)%.([%w_]+)$")
 	if not enumType then enumType, keyName = value:match("^([%w_]+)%.([%w_]+)$") end
@@ -1403,7 +1404,7 @@ local function KeybindInputKey(input)
 	return nil
 end
 
-local function KeybindLabel(key)
+function Private.KeybindLabel(key)
 	if not key then return "None" end
 	if key.EnumType == Enum.UserInputType then
 		return ({
@@ -1425,23 +1426,23 @@ local function KeybindContextActive(context)
 	return context == "global" or context == ActiveKeybindContext
 end
 
-local function KeybindContextsOverlap(first, second)
+function Private.KeybindContextsOverlap(first, second)
 	return first == "global" or second == "global" or first == second
 end
 
-local function KeybindConflicts(control, other)
+function Private.KeybindConflicts(control, other)
 	return control ~= other and not control.destroyed and not other.destroyed
 		and not (control.api and other.api and control.api.Flag ~= nil and control.api.Flag == other.api.Flag)
 		and control.mode ~= "Always" and other.mode ~= "Always"
 		and control.key ~= nil and control.key == other.key
-		and KeybindContextsOverlap(control.context, other.context)
+		and Private.KeybindContextsOverlap(control.context, other.context)
 end
 
 local function RefreshKeybindConflicts()
 	for _, control in ipairs(KeybindControls) do
 		local conflict = false
 		for _, other in ipairs(KeybindControls) do
-			if KeybindConflicts(control, other) then conflict = true; break end
+			if Private.KeybindConflicts(control, other) then conflict = true; break end
 		end
 		local stroke = control.stroke
 		if stroke and stroke.Parent then
@@ -1452,9 +1453,9 @@ local function RefreshKeybindConflicts()
 	end
 end
  
-local NotificationQueue = {}
+Private.NotificationQueue = {}
  
-local function GetNotifyHolder()
+function Private.GetNotifyHolder()
 	local root = VVindUI._Root
 	local holder = root:FindFirstChild("NotificationHolder")
 	if holder then return holder end
@@ -1479,7 +1480,7 @@ local function GetNotifyHolder()
 	LibJanitor:Add(RunService.Heartbeat:Connect(function()
 		if not holder.Parent then return end
 		local s = GetUIScale()
-		local view = ViewportSize()
+		local view = Private.ViewportSize()
 		holder.Size = UDim2.fromOffset(math.max(1, math.min(280, view.X / s - 40)), math.max(1, view.Y / s - 40))
 		local used, count = 0, 0
 		local function fullHeight(card)
@@ -1492,16 +1493,16 @@ local function GetNotifyHolder()
 				count += 1
 			end
 		end
-		while #NotificationQueue > 0 do
-			local entry = NotificationQueue[1]
+		while #Private.NotificationQueue > 0 do
+			local entry = Private.NotificationQueue[1]
 			if not entry.Card.Parent then
-				table.remove(NotificationQueue, 1)
+				table.remove(Private.NotificationQueue, 1)
 			else
 				local h = fullHeight(entry.Card)
 				if h <= 0 then break end
 				local needed = h + (count > 0 and 10 * s or 0)
 				if used + needed > holder.AbsoluteSize.Y then break end
-				table.remove(NotificationQueue, 1)
+				table.remove(Private.NotificationQueue, 1)
 				entry.Start()
 				used += needed
 				count += 1
@@ -1514,14 +1515,14 @@ end
  
 VVindUI._NotifyCounter = 0
  
-local NotifyIcons = {
+Private.NotifyIcons = {
 	info    = "info",
 	success = "check",
 	warning = "triangle-alert",
 	error   = "circle-x",
 }
  
-local NotifyColors = {
+Private.NotifyColors = {
 	info    = Color3.fromRGB(120, 170, 255),
 	success = Color3.fromRGB(110, 220, 140),
 	warning = Color3.fromRGB(255, 190, 90),
@@ -1534,10 +1535,10 @@ function VVindUI:Notify(opts)
 	local text       = opts.Text or ""
 	local duration   = opts.Duration or 4
 	local notifyType = opts.Type or "info"
-	local color      = opts.Color or NotifyColors[notifyType] or VVindUI.Theme.Accent
-	local iconName   = opts.Icon or NotifyIcons[notifyType] or NotifyIcons.info
+	local color      = opts.Color or Private.NotifyColors[notifyType] or VVindUI.Theme.Accent
+	local iconName   = opts.Icon or Private.NotifyIcons[notifyType] or Private.NotifyIcons.info
  
-	local holder = GetNotifyHolder()
+	local holder = Private.GetNotifyHolder()
 	VVindUI._NotifyCounter = VVindUI._NotifyCounter + 1
  
 	local dismiss
@@ -1758,7 +1759,7 @@ function VVindUI:Notify(opts)
 	local function startNotification()
 		if dismissed or not card.Parent then return end
 		card.Visible = true
-		notificationAcrylic = CreateWindowAcrylic(card)
+		notificationAcrylic = Private.CreateWindowAcrylic(card)
 	Tween(card, { BackgroundTransparency = 0.25 }, 0.28)
 	Tween(stroke, { Transparency = 0.82 }, 0.28)
 	Tween(scale, { Scale = 1 }, 0.3, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
@@ -1779,7 +1780,7 @@ function VVindUI:Notify(opts)
  
 		task.delay(duration, dismiss)
 	end
-	table.insert(NotificationQueue, { Card = card, Start = startNotification })
+	table.insert(Private.NotificationQueue, { Card = card, Start = startNotification })
  
 	return {
 		Instance = card,
@@ -1787,8 +1788,8 @@ function VVindUI:Notify(opts)
 	}
 end
  
-local function ComputeDialogCenter(anchorFrame)
-	local view = ViewportSize()
+function Private.ComputeDialogCenter(anchorFrame)
+	local view = Private.ViewportSize()
 	if not anchorFrame or anchorFrame.AbsoluteSize.X <= 0 then
 		return view.X / 2, view.Y / 2
 	end
@@ -1827,7 +1828,7 @@ function VVindUI:Confirm(opts)
 	dialog.Name = "ConfirmDialog"
 	dialog.AnchorPoint = Vector2.new(0.5, 0.5)
 	do
-		local cx, cy = ComputeDialogCenter(anchorFrame)
+		local cx, cy = Private.ComputeDialogCenter(anchorFrame)
 		local s = GetUIScale()
 		dialog.Position = UDim2.fromOffset(math.round(cx / s), math.round(cy / s))
 	end
@@ -2114,7 +2115,7 @@ function VVindUI:Modal(opts)
 	dialog.Name = "ModalDialog"
 	dialog.AnchorPoint = Vector2.new(0.5, 0.5)
 	do
-		local cx, cy = ComputeDialogCenter(anchorFrame)
+		local cx, cy = Private.ComputeDialogCenter(anchorFrame)
 		local s = GetUIScale()
 		dialog.Position = UDim2.fromOffset(math.round(cx / s), math.round(cy / s))
 	end
@@ -2409,7 +2410,7 @@ end
  
 local DRAG_SMOOTH_SPEED = 22
  
-local function SetupSmoothDrag(frame, handle, janitor)
+function Private.SetupSmoothDrag(frame, handle, janitor)
 	handle = handle or frame
  
 	local detector = handle:FindFirstChildWhichIsA("UIDragDetector")
@@ -2422,7 +2423,7 @@ local function SetupSmoothDrag(frame, handle, janitor)
  
 	local function frameOffset()
 		local pos = frame.Position
-		local parentSize = ViewportSize()
+		local parentSize = Private.ViewportSize()
 		if frame.Parent and frame.Parent:IsA("GuiObject") and frame.Parent.AbsoluteSize.X > 0 then
 			parentSize = frame.Parent.AbsoluteSize
 		end
@@ -2437,7 +2438,7 @@ local function SetupSmoothDrag(frame, handle, janitor)
 	local targetPosition = currentPosition
  
 	local function clampToScreen(pos)
-		local view = ViewportSize()
+		local view = Private.ViewportSize()
 		local size = frame.AbsoluteSize
 		local anchor = frame.AnchorPoint
 		local minVisible = 60
@@ -2518,7 +2519,7 @@ local function SetupSmoothDrag(frame, handle, janitor)
 	return api
 end
  
-local function SetupResize(frame, handle, janitor, opts)
+function Private.SetupResize(frame, handle, janitor, opts)
 	opts = opts or {}
 	local minSize = opts.MinSize or Vector2.new(420, 300)
 	local onResize = opts.OnResize
@@ -2550,7 +2551,7 @@ local function SetupResize(frame, handle, janitor, opts)
 			return
 		end
  
-		local view = ViewportSize()
+		local view = Private.ViewportSize()
 		local delta = Vector2.new(input.Position.X, input.Position.Y) - startInput
 		local maxW = math.max(view.X - startTopLeft.X - 8, 100)
 		local maxH = math.max(view.Y - startTopLeft.Y - 8, 100)
@@ -2708,7 +2709,7 @@ local function AddTitleDesc(card, x, rightReserve, title, description, baseHeigh
 	return titleLabel, descLabel, relayout
 end
  
-local function AddEmptyState(scroll, overlayParent, janitor)
+function Private.AddEmptyState(scroll, overlayParent, janitor)
 	local emptyState = Instance.new("Frame")
 	emptyState.Name = "EmptyState"
 	emptyState.BackgroundTransparency = 1
@@ -2769,7 +2770,7 @@ Window.__index = Window
 local Tab = {}
 Tab.__index = Tab
 
-local NextWindowId = 0
+Private.NextWindowId = 0
  
 function VVindUI:CreateWindow(opts)
 	opts = opts or {}
@@ -2783,7 +2784,7 @@ function VVindUI:CreateWindow(opts)
  
 	if IsMobileDevice then
 		-- Landscape layout: use the available height instead of flattening the window.
-		local vp = ViewportSize()
+		local vp = Private.ViewportSize()
 		local s = GetUIScale()
 		size = UDim2.fromOffset(
 			math.floor((vp.X / s) * 0.64),
@@ -2831,10 +2832,10 @@ function VVindUI:CreateWindow(opts)
 	main.Parent = root
 	Corner(main, VVindUI.Theme.CornerRadius)
 	Stroke(main, VVindUI.Theme.Border, 1, 0.92)
-	GlassLayer(main, VVindUI.Theme.CornerRadius, 0.985)
+	Private.GlassLayer(main, VVindUI.Theme.CornerRadius, 0.985)
 
-	NextWindowId += 1
-	local windowId = NextWindowId
+	Private.NextWindowId += 1
+	local windowId = Private.NextWindowId
 	main:SetAttribute("VVindWindowId", windowId)
 	main:SetAttribute("VVindThemeImageColorExempt", true)
 
@@ -3080,11 +3081,11 @@ function VVindUI:CreateWindow(opts)
 	table.insert(VVindUI._Windows, self)
  
 	if opts.Draggable ~= false then
-		self._drag = SetupSmoothDrag(main, topbar, jan)
+		self._drag = Private.SetupSmoothDrag(main, topbar, jan)
 	end
  
 	if opts.Resizable ~= false then
-		SetupResize(main, resizeHandle, jan, {
+		Private.SetupResize(main, resizeHandle, jan, {
 			-- No mobile o minimo nao pode ser maior que a janela ja clampada, senao um
 			-- resize devolve a janela pro tamanho cortado.
 			MinSize = Vector2.new(
@@ -3104,7 +3105,7 @@ function VVindUI:CreateWindow(opts)
 	end
  
 	if self._useBlur then
-		self._acrylic = CreateWindowAcrylic(main)
+		self._acrylic = Private.CreateWindowAcrylic(main)
 		jan:Add(self._acrylic)
 	end
  
@@ -3248,7 +3249,7 @@ function Window:CreateScope()
 	return scope
 end
 
-local function FireWindowDestroyCallbacks(window)
+function Private.FireWindowDestroyCallbacks(window)
 	if window._destroyCallbacksFired then return end
 	window._destroyCallbacksFired = true
 	local callbacks = window._destroyCallbacks or {}
@@ -3285,7 +3286,7 @@ function Window:OnDestroy(callback)
 	return connection
 end
 
-local function IsValidImageReference(image)
+function Private.IsValidImageReference(image)
 	return type(image) == "string"
 		and (image == "" or image:match("^rbxassetid://%d+$") or image:match("^rbxasset://%S+$") or image:match("^https?://%S+$"))
 end
@@ -3293,7 +3294,7 @@ end
 function Window:SetBackgroundImage(image)
 	if self._destroyed then return false, "window has been destroyed" end
 	if image == "" then image = nil end
-	if image ~= nil and not IsValidImageReference(image) then
+	if image ~= nil and not Private.IsValidImageReference(image) then
 		return false, "background must be a Roblox asset id or an HTTP(S) image URL"
 	end
 	self._backgroundImage.Image = image or ""
@@ -3330,12 +3331,12 @@ end
 function Window:Destroy()
 	if self._destroyed then return end
 	self._destroyed = true
-	FireWindowDestroyCallbacks(self)
+	Private.FireWindowDestroyCallbacks(self)
  
 	local idx = table.find(VVindUI._Windows, self)
 	if idx then table.remove(VVindUI._Windows, idx) end
  
-	CloseAnyOpenPopup()
+	Private.CloseAnyOpenPopup()
  
 	local gui = self._gui
  
@@ -3367,7 +3368,7 @@ function Window:Close()
 	self._busy = true
 	self._state = "closed"
  
-	CloseAnyOpenPopup()
+	Private.CloseAnyOpenPopup()
  
 	local gui = self._gui
 	self._sizeBeforeMinimize = self._fullscreen
@@ -3422,7 +3423,7 @@ function Window:ToggleFullscreen()
 	local gui = self._gui
 	self._fullscreen = not self._fullscreen
  
-	CloseAnyOpenPopup()
+	Private.CloseAnyOpenPopup()
  
 	if self._fullscreen then
 		self._preFullscreenPosition = gui.Position
@@ -3463,8 +3464,8 @@ function Window:AddTabLine()
 	return holder
 end
  
-local DOCK_ICON_SIZE = 28
-local DOCK_HEIGHT    = 34
+Private.DOCK_ICON_SIZE = 28
+Private.DOCK_HEIGHT    = 34
  
 function Window:AddDockButton(opts)
 	opts = opts or {}
@@ -3472,7 +3473,7 @@ function Window:AddDockButton(opts)
 	local margin = VVindUI.Theme.Margin
  
 	if not self._dock then
-		local shrunkSize = UDim2.new(0, 130, 1, -(58 + margin + DOCK_HEIGHT + 10))
+		local shrunkSize = UDim2.new(0, 130, 1, -(58 + margin + Private.DOCK_HEIGHT + 10))
 		self._tabBar.Size = shrunkSize
 		self._tabIndicatorLayer.Size = shrunkSize
  
@@ -3481,7 +3482,7 @@ function Window:AddDockButton(opts)
 		dock.BackgroundTransparency = 1
 		dock.AnchorPoint = Vector2.new(0, 1)
 		dock.Position = UDim2.new(0, margin, 1, -margin)
-		dock.Size = UDim2.new(0, 130, 0, DOCK_HEIGHT)
+		dock.Size = UDim2.new(0, 130, 0, Private.DOCK_HEIGHT)
 		dock.ZIndex = Z.Content
 		dock.Parent = self._gui
  
@@ -3501,7 +3502,7 @@ function Window:AddDockButton(opts)
 	btn.BackgroundColor3 = VVindUI.Theme.Surface
 	btn.BackgroundTransparency = 0.95
 	btn.BorderSizePixel = 0
-	btn.Size = UDim2.fromOffset(DOCK_ICON_SIZE, DOCK_ICON_SIZE)
+	btn.Size = UDim2.fromOffset(Private.DOCK_ICON_SIZE, Private.DOCK_ICON_SIZE)
 	btn.LayoutOrder = #self._dock:GetChildren()
 	btn.ZIndex = Z.Content + 1
 	btn.Parent = self._dock
@@ -3544,17 +3545,17 @@ function Window:AddDockButton(opts)
 	}
 end
  
-local CHAT_CODE_FONT = "rbxasset://fonts/families/RobotoMono.json"
+Private.CHAT_CODE_FONT = "rbxasset://fonts/families/RobotoMono.json"
  
-local function EscapeRichText(text)
+function Private.EscapeRichText(text)
 	text = text:gsub("&", "&amp;")
 	text = text:gsub("<", "&lt;")
 	text = text:gsub(">", "&gt;")
 	return text
 end
  
-local function MarkdownToRichText(text)
-	text = EscapeRichText(text)
+function Private.MarkdownToRichText(text)
+	text = Private.EscapeRichText(text)
  
 	text = text:gsub("`([^`\n]+)`", "<font family=\"" .. CHAT_CODE_FONT .. "\">%1</font>")
  
@@ -3567,7 +3568,7 @@ local function MarkdownToRichText(text)
 	return text
 end
  
-local function SplitMessageSegments(text)
+function Private.SplitMessageSegments(text)
 	local segments = {}
 	local pos = 1
 	while true do
@@ -3593,7 +3594,7 @@ local function SplitMessageSegments(text)
 	return segments
 end
  
-local LUA_KEYWORDS = {
+Private.LUA_KEYWORDS = {
 	["and"] = true, ["break"] = true, ["do"] = true, ["else"] = true, ["elseif"] = true,
 	["end"] = true, ["false"] = true, ["for"] = true, ["function"] = true, ["if"] = true,
 	["in"] = true, ["local"] = true, ["nil"] = true, ["not"] = true, ["or"] = true,
@@ -3601,7 +3602,7 @@ local LUA_KEYWORDS = {
 	["until"] = true, ["while"] = true, ["continue"] = true,
 }
  
-local function HighlightLua(code)
+function Private.HighlightLua(code)
 	local out = {}
 	local n = #code
 	local i = 1
@@ -3639,7 +3640,7 @@ local function HighlightLua(code)
 			local j = i
 			while j <= n and code:sub(j, j):match("[%w_]") do j = j + 1 end
 			local word = code:sub(i, j - 1)
-			out[#out + 1] = LUA_KEYWORDS[word] and ("<font color=\"#C586C0\">" .. word .. "</font>") or word
+			out[#out + 1] = Private.LUA_KEYWORDS[word] and ("<font color=\"#C586C0\">" .. word .. "</font>") or word
 			i = j
 		elseif c:match("%d") then
 			local j = i
@@ -3828,7 +3829,7 @@ function Window:AddDefaultCreditsPanel()
 	listLayout.Parent = scroll
  
 	AddScrollbar(scroll)
-	AddContentScrollThumb(scroll, listLayout, panel.Instance, jan)
+	Private.AddContentScrollThumb(scroll, listLayout, panel.Instance, jan)
  
 	for i, credit in ipairs(CREDITS) do
 		local row = Instance.new("Frame")
@@ -4157,7 +4158,7 @@ function Window:AddSpotifyPanel(opts)
 		end
 		task.spawn(function()
 			local asset = coverCache[url]
-			if not asset and fn_customasset and fn_writefile and EnsureAssetsFolder() then
+			if not asset and Private.fn_customasset and fn_writefile and Private.EnsureAssetsFolder() then
 				local hash = 7
 				for index = 1, #url do hash = (hash * 31 + url:byte(index)) % 2147483647 end
 				local path = ASSETS_FOLDER .. "/spotify-cover-" .. tostring(hash) .. ".jpg"
@@ -4166,7 +4167,7 @@ function Window:AddSpotifyPanel(opts)
 					if ok and type(body) == "string" and #body > 256 then pcall(fn_writefile, path, body) end
 				end
 				if not fn_isfile or fn_isfile(path) then
-					local ok, result = pcall(fn_customasset, path)
+					local ok, result = pcall(Private.fn_customasset, path)
 					if ok then asset = result; coverCache[url] = result end
 				end
 			end
@@ -4622,7 +4623,7 @@ function Window:AddSpotifyPanel(opts)
 		end
 	end
 	local function saveFavorites()
-		if not (fn_writefile and EnsureAssetsFolder()) then return end
+		if not (fn_writefile and Private.EnsureAssetsFolder()) then return end
 		pcall(fn_writefile, favoritesPath, HttpService:JSONEncode(favorites))
 	end
  
@@ -5455,7 +5456,7 @@ function Window:AddChatPanel(opts)
 	msgLayout.Parent = msgScroll
  
 	AddScrollbar(msgScroll)
-	AddContentScrollThumb(msgScroll, msgLayout, panel, jan)
+	Private.AddContentScrollThumb(msgScroll, msgLayout, panel, jan)
  
 	local order = 0
 	local transcript = {}
@@ -5558,7 +5559,7 @@ function Window:AddChatPanel(opts)
 			avatarIcon = botIcon
 		end
  
-		local segments = SplitMessageSegments(text)
+		local segments = Private.SplitMessageSegments(text)
 		local hasCode = false
 		for _, seg in ipairs(segments) do
 			if seg.kind == "code" then hasCode = true end
@@ -5753,9 +5754,9 @@ function Window:AddChatPanel(opts)
  
 				local codeLabel = Instance.new("TextLabel")
 				codeLabel.BackgroundTransparency = 1
-				codeLabel.FontFace = Font.new(CHAT_CODE_FONT, Enum.FontWeight.Regular, Enum.FontStyle.Normal)
+				codeLabel.FontFace = Font.new(Private.CHAT_CODE_FONT, Enum.FontWeight.Regular, Enum.FontStyle.Normal)
 				codeLabel.RichText = true
-				codeLabel.Text = HighlightLua(EscapeRichText(seg.content))
+				codeLabel.Text = Private.HighlightLua(Private.EscapeRichText(seg.content))
 				codeLabel.TextColor3 = VVindUI.Theme.Text
 				codeLabel.TextSize = 12
 				codeLabel.TextWrapped = true
@@ -5772,7 +5773,7 @@ function Window:AddChatPanel(opts)
 				label.BackgroundTransparency = 1
 				label.FontFace = VVindUI.Theme.FontRegular
 				label.RichText = true
-				label.Text = MarkdownToRichText(seg.content)
+				label.Text = Private.MarkdownToRichText(seg.content)
 				label.TextColor3 = VVindUI.Theme.Text
 				label.TextTransparency = 1
 				label.TextSize = 13
@@ -6857,7 +6858,7 @@ function Window:AddGlobalChatPanel(opts)
 	msgLayout.Parent = msgScroll
  
 	AddScrollbar(msgScroll)
-	AddContentScrollThumb(msgScroll, msgLayout, panel, jan)
+	Private.AddContentScrollThumb(msgScroll, msgLayout, panel, jan)
  
 	local order = 0
 	local transcript = {}
@@ -7351,9 +7352,9 @@ function Window:AddGlobalChatPanel(opts)
 	}
 end
  
-local TRANSITION_EXIT  = 0.18
-local TRANSITION_GAP   = 0.08
-local TRANSITION_ENTER = 0.32
+Private.TRANSITION_EXIT  = 0.18
+Private.TRANSITION_GAP   = 0.08
+Private.TRANSITION_ENTER = 0.32
  
 function Window:AddTab(nameOrOpts)
 	local opts = type(nameOrOpts) == "table" and nameOrOpts or { Name = nameOrOpts }
@@ -7379,7 +7380,7 @@ function Window:AddTab(nameOrOpts)
 	Corner(tabButton, 10)
  
 	local isPrivate = opts.Password ~= nil and opts.Password ~= ""
-	local remembered = isPrivate and IsPrivateTabRemembered(name)
+	local remembered = isPrivate and Private.IsPrivateTabRemembered(name)
 	local unlocked = not isPrivate or remembered
 	local glowColor = opts.GlowColor or VVindUI.Theme.Accent
 	local glowStroke, lockBadge, glowPulse
@@ -7503,8 +7504,8 @@ function Window:AddTab(nameOrOpts)
 	pageLayout.Parent = page
  
 	AddScrollbar(page)
-	AddContentScrollThumb(page, pageLayout, pageGroup, jan)
-	AddEmptyState(page, pageGroup, jan)
+	Private.AddContentScrollThumb(page, pageLayout, pageGroup, jan)
+	Private.AddEmptyState(page, pageGroup, jan)
  
 	local tabObj = setmetatable({
 		Name      = name,
@@ -7576,7 +7577,7 @@ function Window:AddTab(nameOrOpts)
 			Tween(pageGroup, {
 				GroupTransparency = 0,
 				Position = UDim2.fromOffset(0, 0),
-			}, TRANSITION_ENTER, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+			}, Private.TRANSITION_ENTER, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 		end
  
 		if previousTab and previousTab._group.Visible then
@@ -7584,10 +7585,10 @@ function Window:AddTab(nameOrOpts)
 			Tween(g, {
 				GroupTransparency = 1,
 				Position = UDim2.fromOffset(-direction * 20, 0),
-			}, TRANSITION_EXIT, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-			task.delay(TRANSITION_EXIT, function()
+			}, Private.TRANSITION_EXIT, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+			task.delay(Private.TRANSITION_EXIT, function()
 				if g then g.Visible = false end
-				task.delay(TRANSITION_GAP, playEnter)
+				task.delay(Private.TRANSITION_GAP, playEnter)
 			end)
 		else
 			playEnter()
@@ -7602,7 +7603,7 @@ function Window:AddTab(nameOrOpts)
 			self:_PromptTabPassword(tabObj, function(success, remember)
 				promptOpen = false
 				if not success then return end
-				SetPrivateTabRemembered(tabObj.Name, remember == true)
+				Private.SetPrivateTabRemembered(tabObj.Name, remember == true)
 				unlocked = true
 				tabObj.Unlocked = true
 				if glowPulse then glowPulse:Cancel() end
@@ -7688,7 +7689,7 @@ function Window:_PromptTabPassword(tabObj, callback)
 	dialog.Name = "TabPasswordDialog"
 	dialog.AnchorPoint = Vector2.new(0.5, 0.5)
 	do
-		local cx, cy = ComputeDialogCenter(self._gui)
+		local cx, cy = Private.ComputeDialogCenter(self._gui)
 		local s = GetUIScale()
 		dialog.Position = UDim2.fromOffset(math.round(cx / s), math.round(cy / s))
 	end
@@ -7827,7 +7828,7 @@ function Window:_PromptTabPassword(tabObj, callback)
 	rememberRow.ZIndex = Z.ModalTop + 1
 	rememberRow.Parent = dialog
  
-	local remember = IsPrivateTabRemembered(tabObj.Name)
+	local remember = Private.IsPrivateTabRemembered(tabObj.Name)
  
 	local rememberSwitch = Instance.new("Frame")
 	rememberSwitch.AnchorPoint = Vector2.new(0, 0.5)
@@ -8029,7 +8030,7 @@ function Window:_RegisterSearchable(tabObj, title, instance)
 	table.insert(self._searchIndex, { title = title, instance = instance, tabObj = tabObj })
 end
  
-local function SearchEntryPath(tabObj)
+function Private.SearchEntryPath(tabObj)
 	if not tabObj then return "" end
 	if tabObj._parentTabName then
 		return tabObj._parentTabName .. " \226\128\186 " .. tabObj.Name
@@ -8103,7 +8104,7 @@ end
 function Window:_OpenSearch()
 	local self_ = self
 	local root = VVindUI._Root
-	local panelW = math.min(440, ViewportSize().X / GetUIScale() - 40)
+	local panelW = math.min(440, Private.ViewportSize().X / GetUIScale() - 40)
 	local HEADER_H = 50
 	local MAX_RESULTS_H = 280
 	local ROW_H = 40
@@ -8118,7 +8119,7 @@ function Window:_OpenSearch()
 	local function closeSearch()
 		if not open then return end
 		open = false
-		RegisterPopupClose(closeSearch)
+		Private.RegisterPopupClose(closeSearch)
 		if heartbeatConn then heartbeatConn:Disconnect(); heartbeatConn = nil end
 		if textConn then textConn:Disconnect(); textConn = nil end
 		if focusConn then focusConn:Disconnect(); focusConn = nil end
@@ -8137,8 +8138,8 @@ function Window:_OpenSearch()
 		end)
 	end
  
-	RegisterPopupOpen(closeSearch)
-	backdrop = MakePopupBackdrop(closeSearch)
+	Private.RegisterPopupOpen(closeSearch)
+	backdrop = Private.MakePopupBackdrop(closeSearch)
 	backdrop.BackgroundColor3 = Color3.new(0, 0, 0)
 	Tween(backdrop, { BackgroundTransparency = 0.4 }, 0.36, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
  
@@ -8146,7 +8147,7 @@ function Window:_OpenSearch()
 	panel.Name = "SearchPalette"
 	panel.AnchorPoint = Vector2.new(0.5, 0.5)
 	do
-		local cx, cy = ComputeDialogCenter(self_._gui)
+		local cx, cy = Private.ComputeDialogCenter(self_._gui)
 		local s = GetUIScale()
 		local px, py = math.round(cx / s), math.round(cy / s)
 		restY = py
@@ -8164,7 +8165,7 @@ function Window:_OpenSearch()
 	panel:SetAttribute("VVindWindowId", self_._id)
 	Corner(panel, 14)
 	Stroke(panel, VVindUI.Theme.Border, 1, 0.8)
-	GlassLayer(panel, 14, 0.985)
+	Private.GlassLayer(panel, 14, 0.985)
  
 	scale = Instance.new("UIScale")
 	scale.Scale = 0.94
@@ -8268,7 +8269,7 @@ function Window:_OpenSearch()
 	resultsLayout.Parent = resultsHolder
  
 	AddScrollbar(resultsHolder)
-	AddContentScrollThumb(resultsHolder, resultsLayout, panel, {
+	Private.AddContentScrollThumb(resultsHolder, resultsLayout, panel, {
 		Add = function(_, conn) heartbeatConn = conn end,
 	})
  
@@ -8340,7 +8341,7 @@ function Window:_OpenSearch()
 			local pathLbl = Instance.new("TextLabel")
 			pathLbl.BackgroundTransparency = 1
 			pathLbl.FontFace = VVindUI.Theme.FontRegular
-			pathLbl.Text = SearchEntryPath(entry.tabObj)
+			pathLbl.Text = Private.SearchEntryPath(entry.tabObj)
 			pathLbl.TextColor3 = VVindUI.Theme.TextDim
 			pathLbl.TextSize = 11
 			pathLbl.TextXAlignment = Enum.TextXAlignment.Left
@@ -8406,9 +8407,9 @@ function Window:_OpenSearch()
 	end)
 end
  
-local SUBTAB_EXIT  = 0.18
-local SUBTAB_GAP   = 0.08
-local SUBTAB_ENTER = 0.30
+Private.SUBTAB_EXIT  = 0.18
+Private.SUBTAB_GAP   = 0.08
+Private.SUBTAB_ENTER = 0.30
  
 function Tab:AddSubTab(nameOrOpts)
 	local opts = type(nameOrOpts) == "table" and nameOrOpts or { Name = nameOrOpts }
@@ -8648,8 +8649,8 @@ function Tab:AddSubTab(nameOrOpts)
 	clayout.Parent = container
  
 	AddScrollbar(container)
-	AddContentScrollThumb(container, clayout, group, jan)
-	AddEmptyState(container, group, jan)
+	Private.AddContentScrollThumb(container, clayout, group, jan)
+	Private.AddEmptyState(container, group, jan)
  
 	local sub = setmetatable({
 		Name           = title,
@@ -8759,17 +8760,17 @@ function Tab:SelectSubTab(idx)
 		target.Group.Position = UDim2.fromOffset(direction * 20, 0)
 		Tween(target.Group, {
 			Position = UDim2.fromOffset(0, 0),
-		}, SUBTAB_ENTER, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+		}, Private.SUBTAB_ENTER, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
 	end
  
 	if previousSub and previousSub.Group.Visible then
 		local g = previousSub.Group
 		Tween(g, {
 			Position = UDim2.fromOffset(-direction * 20, 0),
-		}, SUBTAB_EXIT, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
-		task.delay(SUBTAB_EXIT, function()
+		}, Private.SUBTAB_EXIT, Enum.EasingStyle.Quint, Enum.EasingDirection.In)
+		task.delay(Private.SUBTAB_EXIT, function()
 			if g then g.Visible = false end
-			task.delay(SUBTAB_GAP, playEnter)
+			task.delay(Private.SUBTAB_GAP, playEnter)
 		end)
 	else
 		playEnter()
@@ -8787,7 +8788,7 @@ function Tab:SelectSubTabByName(name)
 	return nil
 end
  
-local function ValidateConfigFlag(api, value)
+function Private.ValidateConfigFlag(api, value)
 	local kind = api.Kind
 	if kind == "Toggle" then return type(value) == "boolean", value, "expected a boolean" end
 	if kind == "Slider" then
@@ -8803,7 +8804,7 @@ local function ValidateConfigFlag(api, value)
 				local ok, current = pcall(api.Get, api)
 				if ok then keyValue = current end
 			end
-			local key, keyErr = ResolveKeybindKey(keyValue)
+			local key, keyErr = Private.ResolveKeybindKey(keyValue)
 			if keyErr then return false, nil, keyErr end
 			local mode = value.mode or value.Mode or api.Mode or "Toggle"
 			local legacyPress = mode == "Press"
@@ -8831,7 +8832,7 @@ local function ValidateConfigFlag(api, value)
 			if mode == "Hold" then active = false end
 			return true, { key = key or "NONE", mode = mode, context = context, active = active == true }
 		end
-		local key, keyErr = ResolveKeybindKey(value)
+		local key, keyErr = Private.ResolveKeybindKey(value)
 		if keyErr then return false, nil, keyErr end
 		return true, key
 	end
@@ -8869,7 +8870,7 @@ local function CopyInitialFlagValue(value, seen)
 end
 
 local EnabledBindings = {}
-local function ResolveEnabledCondition(spec)
+function Private.ResolveEnabledCondition(spec)
 	if type(spec) == "function" then
 		local ok, result = pcall(spec, function(flag)
 			local api = VVindUI.Flags[flag]
@@ -8881,13 +8882,13 @@ local function ResolveEnabledCondition(spec)
 	if type(spec) ~= "table" then return false end
 	if type(spec.All) == "table" then
 		for _, item in ipairs(spec.All) do
-			if not ResolveEnabledCondition(item) then return false end
+			if not Private.ResolveEnabledCondition(item) then return false end
 		end
 		return true
 	end
 	if type(spec.Any) == "table" then
 		for _, item in ipairs(spec.Any) do
-			if ResolveEnabledCondition(item) then return true end
+			if Private.ResolveEnabledCondition(item) then return true end
 		end
 		return false
 	end
@@ -8913,7 +8914,7 @@ function VVindUI:RefreshEnabledConditions()
 		if control._VVindDependencyDestroyed then
 			EnabledBindings[control] = nil
 		else
-			local enabled = ResolveEnabledCondition(binding.Condition)
+			local enabled = Private.ResolveEnabledCondition(binding.Condition)
 			if enabled ~= binding.Enabled then
 				binding.Enabled = enabled
 				if type(control.SetLocked) == "function" then
@@ -8972,21 +8973,21 @@ end
 -- VVindUI.Flags continues to expose the canonical controller; replicas are UI views.
 local SharedFlagGroups = {}
 
-local function ReadSharedFlagValue(api)
+function Private.ReadSharedFlagValue(api)
 	local getter = api.Kind == "Keybind" and api.GetState or api.Get
 	assert(type(getter) == "function", "SharedFlag requires a readable control")
 	return getter(api)
 end
 
-local function SyncSharedFlag(group, origin, silent)
+function Private.SyncSharedFlag(group, origin, silent)
 	if group.Syncing or origin._SharedFlagDestroyed then return end
 	group.Syncing = true
 	local ok, err = pcall(function()
-		local value = CopyInitialFlagValue(ReadSharedFlagValue(origin))
+		local value = CopyInitialFlagValue(Private.ReadSharedFlagValue(origin))
 		if origin ~= group.Primary then
 			assert(group.Primary, "SharedFlag has no primary controller")
 			group.Primary:Set(CopyInitialFlagValue(value), silent == true)
-			value = CopyInitialFlagValue(ReadSharedFlagValue(group.Primary))
+			value = CopyInitialFlagValue(Private.ReadSharedFlagValue(group.Primary))
 		end
 		for _, peer in ipairs(group.Controls) do
 			if peer ~= origin and peer ~= group.Primary and not peer._SharedFlagDestroyed then
@@ -9037,7 +9038,7 @@ local function RegisterFlag(opts, api, kind, validator)
 			api._InitializationCallback = opts.Callback
 			api._RegistrationOrder = VVindUI._NextControlRegistration
 		end
-		api.ValidateConfig = validator or function(value) return ValidateConfigFlag(api, value) end
+		api.ValidateConfig = validator or function(value) return Private.ValidateConfigFlag(api, value) end
 
 		local function wrapSetter(method)
 			local setter = api[method]
@@ -9049,7 +9050,7 @@ local function RegisterFlag(opts, api, kind, validator)
 				local results = table.pack(pcall(setter, control, ...))
 				VVindUI._ChangeSource = previousSource
 				if not results[1] then error(results[2], 2) end
-				if not group.Syncing then SyncSharedFlag(group, api, arguments[2]) end
+				if not group.Syncing then Private.SyncSharedFlag(group, api, arguments[2]) end
 				return table.unpack(results, 2, results.n)
 			end
 		end
@@ -9061,7 +9062,7 @@ local function RegisterFlag(opts, api, kind, validator)
 		end
 
 		if existing then
-			local snapshotOk, snapshot = pcall(ReadSharedFlagValue, group.Primary)
+			local snapshotOk, snapshot = pcall(Private.ReadSharedFlagValue, group.Primary)
 			if not snapshotOk then error("shared flag '" .. flag .. "' cannot read its primary: " .. tostring(snapshot), 2) end
 			group.Syncing = true
 			local applied, applyErr = pcall(api.Set, api, CopyInitialFlagValue(snapshot), true)
@@ -9080,7 +9081,7 @@ local function RegisterFlag(opts, api, kind, validator)
 		if type(configChangeHook) == "function" then
 			local ok, connection = pcall(configChangeHook, api, function()
 				if api._SharedFlagDestroyed then return end
-				SyncSharedFlag(group, api, false)
+				Private.SyncSharedFlag(group, api, false)
 				VVindUI:RefreshEnabledConditions()
 				if group.Primary == api and not VVindUI._ApplyingConfig and VVindUI.QueueAutoConfigSave then
 					VVindUI:QueueAutoConfigSave(flag)
@@ -9583,7 +9584,7 @@ function Tab:AddParagraph(opts)
 	}
 end
  
-local function BuildStarRow(parent, layoutOrder, maxStars, starColor, starSize, default)
+function Private.BuildStarRow(parent, layoutOrder, maxStars, starColor, starSize, default)
 	local starOutline = ResolveIcon("Phosphor:star")
 	local starFilled = ResolveIcon("Material:star")
  
@@ -9654,7 +9655,7 @@ local function BuildStarRow(parent, layoutOrder, maxStars, starColor, starSize, 
 	}
 end
  
-local function NormalizeFeedbackText(text)
+function Private.NormalizeFeedbackText(text)
 	local invisibleChars = {
 		["\226\128\139"] = "", ["\226\128\142"] = "", ["\226\128\143"] = "",
 		["\239\187\191"] = "", ["\194\173"] = "",
@@ -9668,7 +9669,7 @@ local function NormalizeFeedbackText(text)
 	return text
 end
  
-local FeedbackEvasionPatterns = {
+Private.FeedbackEvasionPatterns = {
 	{pattern = "d%s*i%s*s%s*c%s*o%s*r%s*d", name = "discord"},
 	{pattern = "t%s*e%s*l%s*e%s*g%s*r%s*a%s*m", name = "telegram"},
 	{pattern = "w%s*h%s*a%s*t%s*s%s*a%s*p%s*p", name = "whatsapp"},
@@ -9686,8 +9687,8 @@ local FeedbackEvasionPatterns = {
 	{pattern = "a%s*t%s*%s*%s*e%s*v%s*e%s*r%s*y%s*o%s*n%s*e", name = "@everyone"},
 }
  
-local function DetectFeedbackEvasion(text)
-	for _, evasion in ipairs(FeedbackEvasionPatterns) do
+function Private.DetectFeedbackEvasion(text)
+	for _, evasion in ipairs(Private.FeedbackEvasionPatterns) do
 		if text:match(evasion.pattern) then
 			return true, evasion.name
 		end
@@ -9704,7 +9705,7 @@ local function DetectFeedbackEvasion(text)
 	return false, nil
 end
  
-local FeedbackAsciiMap = {
+Private.FeedbackAsciiMap = {
 	["á"] = "a", ["à"] = "a", ["ã"] = "a", ["â"] = "a", ["ä"] = "a",
 	["Á"] = "A", ["À"] = "A", ["Ã"] = "A", ["Â"] = "A", ["Ä"] = "A",
 	["é"] = "e", ["è"] = "e", ["ê"] = "e", ["ë"] = "e",
@@ -9719,16 +9720,16 @@ local FeedbackAsciiMap = {
 	["°"] = " ", ["º"] = " ", ["ª"] = " ",
 }
  
-local FeedbackAllowedChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,!?;:()[]{}@#%&*+-=/_\"'"
+Private.FeedbackAllowedChars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,!?;:()[]{}@#%&*+-=/_\"'"
  
-local function SanitizeFeedbackText(text)
+function Private.SanitizeFeedbackText(text)
 	if not text or text == "" then
 		return "_No message_"
 	end
  
-	text = NormalizeFeedbackText(text)
+	text = Private.NormalizeFeedbackText(text)
  
-	local hasEvasion, evasionType = DetectFeedbackEvasion(text)
+	local hasEvasion, evasionType = Private.DetectFeedbackEvasion(text)
 	if hasEvasion then
 		return "[Message blocked - " .. evasionType .. "]"
 	end
@@ -9744,14 +9745,14 @@ local function SanitizeFeedbackText(text)
 	text = text:gsub("www%s*%.%s*[%w%-]+%s*%.%s*[%w]+", "[link removed]")
 	text = text:gsub("t[eE][lL][eE][gG][rR][aA][mM]%.?%s*[mM][eE]%s*/%s*[%w%-_]+", "[invite removed]")
  
-	for old, new in pairs(FeedbackAsciiMap) do
+	for old, new in pairs(Private.FeedbackAsciiMap) do
 		text = text:gsub(old, new)
 	end
  
 	local cleaned = ""
 	for i = 1, #text do
 		local char = text:sub(i, i)
-		if FeedbackAllowedChars:find(char, 1, true) then
+		if Private.FeedbackAllowedChars:find(char, 1, true) then
 			cleaned = cleaned .. char
 		else
 			cleaned = cleaned .. " "
@@ -9763,7 +9764,7 @@ local function SanitizeFeedbackText(text)
 	text = text:gsub("^%s+", "")
 	text = text:gsub("%s+$", "")
  
-	local hasEvasionAfter = DetectFeedbackEvasion(text)
+	local hasEvasionAfter = Private.DetectFeedbackEvasion(text)
 	if hasEvasionAfter then
 		return "[Message blocked - suspicious content]"
 	end
@@ -9783,13 +9784,13 @@ function VVindUI:SanitizeText(text, opts)
 		return "", false, nil
 	end
  
-	local normalized = NormalizeFeedbackText(tostring(text))
-	local hasEvasion, evasionType = DetectFeedbackEvasion(normalized)
+	local normalized = Private.NormalizeFeedbackText(tostring(text))
+	local hasEvasion, evasionType = Private.DetectFeedbackEvasion(normalized)
 	if hasEvasion then
 		return "", true, evasionType
 	end
  
-	local cleaned = SanitizeFeedbackText(text)
+	local cleaned = Private.SanitizeFeedbackText(text)
 	if cleaned == "_No message_" then
 		return "", false, nil
 	end
@@ -9804,20 +9805,20 @@ function VVindUI:SanitizeText(text, opts)
 	return cleaned, false, nil
 end
  
-local FEEDBACK_WEBHOOK_COOLDOWN = 30
-local LastFeedbackWebhookAt = 0
+Private.FEEDBACK_WEBHOOK_COOLDOWN = 30
+Private.LastFeedbackWebhookAt = 0
  
 function VVindUI:SendFeedbackWebhook(webhookUrl, stars, message, opts)
 	opts = opts or {}
 	stars = math.clamp(math.floor((stars or 0) + 0.5), 0, 5)
  
 	local now = os.clock()
-	if now - LastFeedbackWebhookAt < FEEDBACK_WEBHOOK_COOLDOWN then
+	if now - Private.LastFeedbackWebhookAt < Private.FEEDBACK_WEBHOOK_COOLDOWN then
 		self:Notify({
 			Title = "Feedback",
 			Text  = string.format(
 				"Please wait %ds before sending more feedback.",
-				math.ceil(FEEDBACK_WEBHOOK_COOLDOWN - (now - LastFeedbackWebhookAt))
+				math.ceil(Private.FEEDBACK_WEBHOOK_COOLDOWN - (now - Private.LastFeedbackWebhookAt))
 			),
 			Type  = "warning",
 			Duration = 3,
@@ -9846,12 +9847,12 @@ function VVindUI:SendFeedbackWebhook(webhookUrl, stars, message, opts)
 		return false
 	end
  
-	local normalizedMessage = NormalizeFeedbackText(message or "")
-	local hasEvasion = DetectFeedbackEvasion(normalizedMessage)
-	local cleanMessage = SanitizeFeedbackText(message)
+	local normalizedMessage = Private.NormalizeFeedbackText(message or "")
+	local hasEvasion = Private.DetectFeedbackEvasion(normalizedMessage)
+	local cleanMessage = Private.SanitizeFeedbackText(message)
  
 	if hasEvasion or cleanMessage:find("blocked") then
-		LastFeedbackWebhookAt = now
+		Private.LastFeedbackWebhookAt = now
 		self:Notify({
 			Title = "Blocked",
 			Text = "Unallowed content detected.",
@@ -9861,7 +9862,7 @@ function VVindUI:SendFeedbackWebhook(webhookUrl, stars, message, opts)
 		return false
 	end
  
-	LastFeedbackWebhookAt = now
+	Private.LastFeedbackWebhookAt = now
  
 	local starDisplay = string.rep("\226\152\133", stars) .. string.rep("\226\152\134", 5 - stars)
 	local embedColor = opts.Color or 0xFFC440
@@ -9899,7 +9900,7 @@ function VVindUI:SendFeedbackWebhook(webhookUrl, stars, message, opts)
 	return true
 end
  
-local function BuildFeedbackRow(parent, layoutOrder, rowH, placeholder, buttonIcon)
+function Private.BuildFeedbackRow(parent, layoutOrder, rowH, placeholder, buttonIcon)
 	local row = Instance.new("Frame")
 	row.Name = "Feedback"
 	row.BackgroundTransparency = 1
@@ -10015,8 +10016,8 @@ function Tab:AddRating(opts)
 		self._window:_RegisterSearchable(self, opts.Title, card)
 	end
  
-	local starBar = BuildStarRow(card, 2, maxStars, starColor, 20, opts.Default)
-	local feedback = BuildFeedbackRow(card, 3, 26, opts.Placeholder, opts.ButtonIcon)
+	local starBar = Private.BuildStarRow(card, 2, maxStars, starColor, 20, opts.Default)
+	local feedback = Private.BuildFeedbackRow(card, 3, 26, opts.Placeholder, opts.ButtonIcon)
  
 	local clearOnSubmit = opts.ClearOnSubmit ~= false
 	feedback.SendBtn.MouseButton1Click:Connect(function()
@@ -10303,9 +10304,9 @@ function Tab:AddCard(opts)
 			if ratingOpts.TitleKey then VVindUI:Localize(ratingLabel, ratingOpts.TitleKey) end
 		end
  
-		local starBar = BuildStarRow(ratingBody, 2, math.max(1, ratingOpts.MaxStars or 5),
+		local starBar = Private.BuildStarRow(ratingBody, 2, math.max(1, ratingOpts.MaxStars or 5),
 			ratingOpts.StarColor or Color3.fromRGB(255, 196, 64), RATING_STAR_H, ratingOpts.Default)
-		local feedback = BuildFeedbackRow(ratingBody, 3, RATING_INPUT_H, ratingOpts.Placeholder, ratingOpts.ButtonIcon)
+		local feedback = Private.BuildFeedbackRow(ratingBody, 3, RATING_INPUT_H, ratingOpts.Placeholder, ratingOpts.ButtonIcon)
  
 		local clearOnSubmit = ratingOpts.ClearOnSubmit ~= false
 		feedback.SendBtn.MouseButton1Click:Connect(function()
@@ -10347,7 +10348,7 @@ function Tab:AddCard(opts)
 	return result
 end
  
-local CHANGELOG_TYPES = {
+Private.CHANGELOG_TYPES = {
 	Added   = { Color = Color3.fromRGB(120, 210, 140), Icon = "plus" },
 	Fixed   = { Color = Color3.fromRGB(120, 170, 255), Icon = "wrench" },
 	Changed = { Color = Color3.fromRGB(255, 190, 90),  Icon = "refresh-cw" },
@@ -10420,8 +10421,8 @@ function Tab:AddChangelogEntry(opts)
 	rowsLayout.Parent = rowsHolder
  
 	for i, change in ipairs(changes) do
-		local kind = CHANGELOG_TYPES[change.Type] and change.Type or "Changed"
-		local meta = CHANGELOG_TYPES[kind]
+		local kind = Private.CHANGELOG_TYPES[change.Type] and change.Type or "Changed"
+		local meta = Private.CHANGELOG_TYPES[kind]
  
 		local row = Instance.new("Frame")
 		row.Name = "Row" .. i
@@ -10816,7 +10817,7 @@ function Tab:AddSystemInfoGrid(opts)
 		Items = {
 			{ Label = "FPS",           Value = "--" },
 			{ Label = "Ping",          Value = "-- ms" },
-			{ Label = "Executor",      Value = GetExecutorName() },
+			{ Label = "Executor",      Value = Private.GetExecutorName() },
 			{ Label = "Server Region", Value = "Unknown" },
 			{ Label = "Time of Day",   Value = "--:--" },
 		},
@@ -10849,7 +10850,7 @@ function Tab:AddSystemInfoGrid(opts)
  
 				local h = tonumber(os.date("%H"))
 				local m = tonumber(os.date("%M"))
-				grid:SetValue("Time of Day", FormatClock(h * 60 + m))
+				grid:SetValue("Time of Day", Private.FormatClock(h * 60 + m))
 			end)
 			task.wait(1)
 		end
@@ -11373,11 +11374,11 @@ function Tab:AddSlider(opts)
 	end)
 end
  
-local function ComputePopupPosition(window, card, w, h)
+function Private.ComputePopupPosition(window, card, w, h)
 	local s = GetUIScale()
 	local realW, realH = w * s, h * s
  
-	local view = ViewportSize()
+	local view = Private.ViewportSize()
 	local winPos = window.AbsolutePosition
 	local winSize = window.AbsoluteSize
 	local cardPos = card.AbsolutePosition
@@ -11409,7 +11410,7 @@ function Tab:AddAssetGrid(opts)
 		end
 		assert(type(reference) == "string", "AssetGrid images must be asset IDs or image URLs")
 		if reference:match("^%d+$") then return "rbxassetid://" .. reference end
-		assert(IsValidImageReference(reference),
+		assert(Private.IsValidImageReference(reference),
 			"AssetGrid image must be an asset ID, rbxasset:// path, or HTTP(S) image URL")
 		return reference
 	end
@@ -11854,7 +11855,7 @@ function Tab:AddDropdown(opts)
 	local function closePopup()
 		if not popupOpen then return end
 		popupOpen = false
-		RegisterPopupClose(closePopup)
+		Private.RegisterPopupClose(closePopup)
 		Tween(chevron, { Rotation = 0 }, 0.15)
  
 		if followConn then followConn:Disconnect(); followConn = nil end
@@ -11892,7 +11893,7 @@ function Tab:AddDropdown(opts)
 	local function openPopup()
 		if popupOpen then return end
 		popupOpen = true
-		RegisterPopupOpen(closePopup)
+		Private.RegisterPopupOpen(closePopup)
 		Tween(chevron, { Rotation = 180 }, 0.15)
  
 		local root = VVindUI._Root
@@ -11902,7 +11903,7 @@ function Tab:AddDropdown(opts)
 		local searchable = opts.Searchable == true or (opts.Searchable ~= false and #options >= 8)
 		local searchHeight = searchable and 36 or 0
 		local contentH = #options * rowH + math.max(#options - 1, 0) * 2 + padV + searchHeight
-		local targetHeight = math.min(contentH, 220, math.max(1, (ViewportSize().Y - 16) / GetUIScale()))
+		local targetHeight = math.min(contentH, 220, math.max(1, (Private.ViewportSize().Y - 16) / GetUIScale()))
  
 		local popupW = 140
 		for _, option in ipairs(options) do
@@ -11910,9 +11911,9 @@ function Tab:AddDropdown(opts)
 			popupW = math.max(popupW, w + 66)
 		end
 		if searchable then popupW = math.max(popupW, 180) end
-		popupW = math.min(popupW, ViewportSize().X / GetUIScale() - 24)
+		popupW = math.min(popupW, Private.ViewportSize().X / GetUIScale() - 24)
  
-		popupBackdrop = MakePopupBackdrop(closePopup)
+		popupBackdrop = Private.MakePopupBackdrop(closePopup)
  
 		popupFrame = Instance.new("CanvasGroup")
 		popupFrame.Name = "DropdownPopup"
@@ -11927,9 +11928,9 @@ function Tab:AddDropdown(opts)
 		if self._window then popupFrame:SetAttribute("VVindWindowId", self._window._id) end
 		Corner(popupFrame, 10)
 		local popupStroke = Stroke(popupFrame, VVindUI.Theme.Border, 1, 0.92)
-		GlassLayer(popupFrame, 10, 0.985)
+		Private.GlassLayer(popupFrame, 10, 0.985)
  
-		local px, py = ComputePopupPosition(mainWindow, card, popupW, targetHeight)
+		local px, py = Private.ComputePopupPosition(mainWindow, card, popupW, targetHeight)
 		popupFrame.Position = UDim2.fromOffset(px, py)
  
 		local optionsHolder = Instance.new("ScrollingFrame")
@@ -11958,7 +11959,7 @@ function Tab:AddDropdown(opts)
 		optLayout.Parent = optionsHolder
  
 		AddScrollbar(optionsHolder)
-		AddContentScrollThumb(optionsHolder, optLayout, popupFrame, {
+		Private.AddContentScrollThumb(optionsHolder, optLayout, popupFrame, {
 			Add = function(_, conn) scrollConn = conn end,
 		})
 		local searchBox
@@ -12107,7 +12108,7 @@ function Tab:AddDropdown(opts)
  
 		followConn = RunService.RenderStepped:Connect(function()
 			if not popupFrame or not card.Parent then return end
-			local nx, ny = ComputePopupPosition(mainWindow, card, popupW, targetHeight)
+			local nx, ny = Private.ComputePopupPosition(mainWindow, card, popupW, targetHeight)
 			popupFrame.Position = UDim2.fromOffset(nx, ny)
 		end)
 		jan:Add(followConn)
@@ -12316,7 +12317,7 @@ function Tab:AddTextbox(opts)
 	}, "Textbox")
 end
  
-local function MiniField(parent, label, width, zBase)
+function Private.MiniField(parent, label, width, zBase)
 	zBase = zBase or Z.Popup
  
 	local holder = Instance.new("Frame")
@@ -12477,7 +12478,7 @@ function Tab:AddColorPicker(opts)
 		popupOpen = false
 		draggingSV, draggingHue = false, false
 		colorInput = nil
-		RegisterPopupClose(closePopup)
+		Private.RegisterPopupClose(closePopup)
 		Tween(swatchStroke, { Color = VVindUI.Theme.Border, Transparency = 0.85 }, 0.15)
  
 		if followConn then followConn:Disconnect(); followConn = nil end
@@ -12544,14 +12545,14 @@ function Tab:AddColorPicker(opts)
 		popupOpen = true
 		originalHue, originalSat, originalVal = hue, sat, val
 		lastFired = currentColor()
-		RegisterPopupOpen(closePopup)
+		Private.RegisterPopupOpen(closePopup)
 		Tween(swatchStroke, { Color = VVindUI.Theme.Accent, Transparency = 0.3 }, 0.15)
  
 		local root = VVindUI._Root
 		local mainWindow = self._window and self._window._gui or root
-		local popupW, popupH = 208, math.min(290, math.max(1, (ViewportSize().Y - 16) / GetUIScale()))
+		local popupW, popupH = 208, math.min(290, math.max(1, (Private.ViewportSize().Y - 16) / GetUIScale()))
  
-		popupBackdrop = MakePopupBackdrop(requestCloseFromBackdrop)
+		popupBackdrop = Private.MakePopupBackdrop(requestCloseFromBackdrop)
  
 		popupFrame = Instance.new("ScrollingFrame")
 		popupFrame.CanvasSize = UDim2.fromOffset(0, 290)
@@ -12573,9 +12574,9 @@ function Tab:AddColorPicker(opts)
 		if self._window then popupFrame:SetAttribute("VVindWindowId", self._window._id) end
 		Corner(popupFrame, 10)
 		local popupStroke = Stroke(popupFrame, VVindUI.Theme.Border, 1, 0.92)
-		GlassLayer(popupFrame, 10, 0.985)
+		Private.GlassLayer(popupFrame, 10, 0.985)
  
-		local px, py = ComputePopupPosition(mainWindow, card, popupW, popupH)
+		local px, py = Private.ComputePopupPosition(mainWindow, card, popupW, popupH)
 		popupFrame.Position = UDim2.fromOffset(px, py)
  
 		local pad = Instance.new("UIPadding")
@@ -12696,7 +12697,7 @@ function Tab:AddColorPicker(opts)
 		Corner(hueCursor, 3)
 		Stroke(hueCursor, Color3.new(0, 0, 0), 1, 0.4)
  
-		local hexHolder, hexRef = MiniField(popupFrame, "HEX", innerW, Z.Popup)
+		local hexHolder, hexRef = Private.MiniField(popupFrame, "HEX", innerW, Z.Popup)
 		hexHolder.Position = UDim2.fromOffset(0, 136)
 		hexBox = hexRef
  
@@ -12707,15 +12708,15 @@ function Tab:AddColorPicker(opts)
 		rgbRow.ZIndex = Z.Popup + 1
 		rgbRow.Parent = popupFrame
  
-		local rHolder, rRef = MiniField(rgbRow, "R", 54, Z.Popup)
+		local rHolder, rRef = Private.MiniField(rgbRow, "R", 54, Z.Popup)
 		rHolder.Position = UDim2.fromOffset(0, 0)
 		rBox = rRef
  
-		local gHolder, gRef = MiniField(rgbRow, "G", 54, Z.Popup)
+		local gHolder, gRef = Private.MiniField(rgbRow, "G", 54, Z.Popup)
 		gHolder.Position = UDim2.fromOffset(62, 0)
 		gBox = gRef
  
-		local bHolder, bRef = MiniField(rgbRow, "B", 56, Z.Popup)
+		local bHolder, bRef = Private.MiniField(rgbRow, "B", 56, Z.Popup)
 		bHolder.Position = UDim2.fromOffset(124, 0)
 		bBox = bRef
  
@@ -12833,7 +12834,7 @@ function Tab:AddColorPicker(opts)
  
 		followConn = RunService.RenderStepped:Connect(function()
 			if not popupFrame or not card.Parent then return end
-			local nx, ny = ComputePopupPosition(mainWindow, card, popupW, popupH)
+			local nx, ny = Private.ComputePopupPosition(mainWindow, card, popupW, popupH)
 			popupFrame.Position = UDim2.fromOffset(nx, ny)
 		end)
 		jan:Add(followConn)
@@ -12865,7 +12866,7 @@ function Tab:AddKeybind(opts)
 	local modeNames = { Toggle = "TGL", Hold = "HLD", Always = "ALW" }
 	local mode = opts.Mode or "Toggle"
 	assert(table.find(modeOrder, mode), "Keybind Mode must be Toggle, Hold, or Always")
-	local currentKey, keyErr = ResolveKeybindKey(opts.Default)
+	local currentKey, keyErr = Private.ResolveKeybindKey(opts.Default)
 	assert(not keyErr, "Keybind Default " .. tostring(keyErr))
 	local context = opts.Context or "global"
 	assert(type(context) == "string" and context:gsub("%s", "") ~= "", "Keybind Context must be a non-empty string")
@@ -12904,7 +12905,7 @@ function Tab:AddKeybind(opts)
 	local keyLabel = Instance.new("TextLabel")
 	keyLabel.BackgroundTransparency = 1
 	keyLabel.FontFace = VVindUI.Theme.FontRegular
-	keyLabel.Text = KeybindLabel(currentKey)
+	keyLabel.Text = Private.KeybindLabel(currentKey)
 	keyLabel.TextColor3 = VVindUI.Theme.Text
 	keyLabel.TextSize = 13
 	keyLabel.TextTruncate = Enum.TextTruncate.AtEnd
@@ -12956,7 +12957,7 @@ function Tab:AddKeybind(opts)
 	}
 
 	local function updateKeyVisual()
-		keyLabel.Text = listening and "..." or KeybindLabel(currentKey)
+		keyLabel.Text = listening and "..." or Private.KeybindLabel(currentKey)
 		modeButton.Text = modeNames[mode]
 	end
 
@@ -13116,7 +13117,7 @@ function Tab:AddKeybind(opts)
 		if not listening then return end
 		listening = false
 		control.listening = false
-		if KeybindCaptureStop == stopListening then KeybindCaptureStop = nil end
+		if Private.KeybindCaptureStop == stopListening then Private.KeybindCaptureStop = nil end
 		KeybindCapturing = false
 		if listenConn then listenConn:Disconnect(); listenConn = nil end
 		Tween(pillStroke, { Color = VVindUI.Theme.Border, Transparency = 0.88 }, 0.15)
@@ -13127,12 +13128,12 @@ function Tab:AddKeybind(opts)
 
 	local function startListening()
 		if listening then return end
-		if KeybindCaptureStop then KeybindCaptureStop() end
+		if Private.KeybindCaptureStop then Private.KeybindCaptureStop() end
 		releaseHold()
 		listening = true
 		control.listening = true
 		KeybindCapturing = true
-		KeybindCaptureStop = stopListening
+		Private.KeybindCaptureStop = stopListening
 		updateKeyVisual()
 		Tween(pillStroke, { Color = VVindUI.Theme.Accent, Transparency = 0.3 }, 0.15)
 		Tween(pill, { BackgroundTransparency = 0.82 }, 0.15)
@@ -13158,18 +13159,18 @@ function Tab:AddKeybind(opts)
 	end
 
 	local function closeModePopup()
-		RegisterPopupClose(closeModePopup)
+		Private.RegisterPopupClose(closeModePopup)
 		if modeBackdrop then modeBackdrop:Destroy(); modeBackdrop = nil end
 		if modePopup then modePopup:Destroy(); modePopup = nil end
 	end
 
 	local function openModePopup()
 		if modePopup then closeModePopup(); return end
-		CloseAnyOpenPopup()
-		RegisterPopupOpen(closeModePopup)
-		modeBackdrop = MakePopupBackdrop(closeModePopup)
+		Private.CloseAnyOpenPopup()
+		Private.RegisterPopupOpen(closeModePopup)
+		modeBackdrop = Private.MakePopupBackdrop(closeModePopup)
 		local root, scale = VVindUI._Root, GetUIScale()
-		local view = ViewportSize()
+		local view = Private.ViewportSize()
 		local popupW, rowH, pad = 142, 30, 6
 		local popupH = pad * 2 + #modeOrder * rowH
 		local anchorPos, anchorSize = modeButton.AbsolutePosition, modeButton.AbsoluteSize
@@ -13249,7 +13250,7 @@ function Tab:AddKeybind(opts)
 					local rawKey = value.key
 					if rawKey == nil then rawKey = value.Key end
 					if rawKey ~= nil then
-						local key, err = ResolveKeybindKey(rawKey)
+						local key, err = Private.ResolveKeybindKey(rawKey)
 						assert(not err, "Keybind value " .. tostring(err))
 						nextKey = key
 					end
@@ -13266,7 +13267,7 @@ function Tab:AddKeybind(opts)
 					if nextContext ~= nil then assert(type(nextContext) == "string" and nextContext:gsub("%s", "") ~= "", "Keybind Context must be a non-empty string") end
 					if activeSpecified then assert(type(nextActive) == "boolean", "Keybind active state must be a boolean") end
 				else
-					local key, err = ResolveKeybindKey(value)
+					local key, err = Private.ResolveKeybindKey(value)
 					assert(not err, "Keybind value " .. tostring(err))
 					nextKey = key
 				end
@@ -13328,7 +13329,7 @@ function Tab:AddKeybind(opts)
 		GetConflicts = function()
 			local conflicts = {}
 			for _, other in ipairs(KeybindControls) do
-				if KeybindConflicts(control, other) then table.insert(conflicts, other.api or other) end
+				if Private.KeybindConflicts(control, other) then table.insert(conflicts, other.api or other) end
 			end
 			return conflicts
 		end,
@@ -13359,8 +13360,8 @@ function Tab:AddKeybind(opts)
 	table.insert(KeybindControls, control)
 	RefreshKeybindConflicts()
 
-	if not KeybindInputHandlersInstalled then
-		KeybindInputHandlersInstalled = true
+	if not Private.KeybindInputHandlersInstalled then
+		Private.KeybindInputHandlersInstalled = true
 		LibJanitor:Add(UserInputService.InputBegan:Connect(function(input, gameProcessed)
 			if KeybindCapturing or gameProcessed or UserInputService:GetFocusedTextBox() then return end
 			local pressed = KeybindInputKey(input)
@@ -13383,7 +13384,7 @@ function Tab:AddKeybind(opts)
 			end
 		end))
 		LibJanitor:Add(UserInputService.WindowFocusReleased:Connect(function()
-			if KeybindCaptureStop then KeybindCaptureStop() end
+			if Private.KeybindCaptureStop then Private.KeybindCaptureStop() end
 			for _, item in ipairs(KeybindControls) do
 				if item.holdActive then item.releaseHold() end
 			end
@@ -13412,7 +13413,7 @@ function VVindUI:GetKeybindContext()
 	return ActiveKeybindContext
 end
  
-local ConsoleColors = {
+Private.ConsoleColors = {
 	[Enum.MessageType.MessageInfo]    = Color3.fromRGB(120, 170, 255),
 	[Enum.MessageType.MessageWarning] = Color3.fromRGB(255, 190, 90),
 	[Enum.MessageType.MessageError]   = Color3.fromRGB(255, 105, 105),
@@ -13572,7 +13573,7 @@ function Tab:AddConsole(opts)
 	logsLayout.Parent = logsScroll
  
 	AddScrollbar(logsScroll)
-	AddContentScrollThumb(logsScroll, logsLayout, container, jan)
+	Private.AddContentScrollThumb(logsScroll, logsLayout, container, jan)
  
 	local emptyState = Instance.new("Frame")
 	emptyState.Name = "EmptyState"
@@ -13637,7 +13638,7 @@ function Tab:AddConsole(opts)
 		trimLogs()
  
 		counter = counter + 1
-		local color = ConsoleColors[messageType] or VVindUI.Theme.Text
+		local color = Private.ConsoleColors[messageType] or VVindUI.Theme.Text
  
 		local entry = Instance.new("TextLabel")
 		entry.Name = "Entry"
@@ -13885,7 +13886,7 @@ function Tab:AddTable(opts)
 	rowsLayout.Parent = scroll
  
 	AddScrollbar(scroll)
-	AddContentScrollThumb(scroll, rowsLayout, container, jan)
+	Private.AddContentScrollThumb(scroll, rowsLayout, container, jan)
  
 	local emptyLabel = Instance.new("TextLabel")
 	emptyLabel.BackgroundTransparency = 1
@@ -14002,7 +14003,7 @@ function Tab:AddTable(opts)
 	return api
 end
  
-local function Serialize(value)
+function Private.Serialize(value)
 	local t = typeof(value)
 	if t == "Color3" then
 		return { Color = value:ToHex(), Transparency = 0 }
@@ -14010,13 +14011,13 @@ local function Serialize(value)
 		return { __t = "Enum", v = tostring(value) }
 	elseif t == "table" then
 		local out = {}
-		for key, item in pairs(value) do out[key] = Serialize(item) end
+		for key, item in pairs(value) do out[key] = Private.Serialize(item) end
 		return out
 	end
 	return value
 end
  
-local function Deserialize(value)
+function Private.Deserialize(value)
 	if type(value) ~= "table" then return value end
 	if value.__t == "Nil" then
 		return nil
@@ -14034,14 +14035,14 @@ local function Deserialize(value)
 		return result
 	end
 	local out = {}
-	for key, item in pairs(value) do out[key] = Deserialize(item) end
+	for key, item in pairs(value) do out[key] = Private.Deserialize(item) end
 	return out
 end
 
-local function CopyConfigValue(value)
+function Private.CopyConfigValue(value)
 	if type(value) ~= "table" then return value end
 	local copy = {}
-	for key, item in pairs(value) do copy[key] = CopyConfigValue(item) end
+	for key, item in pairs(value) do copy[key] = Private.CopyConfigValue(item) end
 	return copy
 end
  
@@ -14255,7 +14256,7 @@ function Tab:AddCardGrid(opts)
  
 	if not showNativeScrollbar then
 		AddScrollbar(gridScroll)
-		AddContentScrollThumb(gridScroll, gridLayout, outer, self._janitor)
+		Private.AddContentScrollThumb(gridScroll, gridLayout, outer, self._janitor)
 	end
  
 	local MAX_OUTER_H = opts.Height or 300
@@ -14332,19 +14333,19 @@ function Tab:AddCardGrid(opts)
  
 		local popup, backdrop
 		local function closeMenu()
-			RegisterPopupClose(closeMenu)
+			Private.RegisterPopupClose(closeMenu)
 			if backdrop then backdrop:Destroy(); backdrop = nil end
 			if popup then popup:Destroy(); popup = nil end
 		end
  
-		RegisterPopupOpen(closeMenu)
-		backdrop = MakePopupBackdrop(closeMenu)
+		Private.RegisterPopupOpen(closeMenu)
+		backdrop = Private.MakePopupBackdrop(closeMenu)
  
 		local rowH, gap, pad = 32, 2, 8
 		local popupW = 190
 		local popupH = pad * 2 + #actions * rowH + math.max(0, #actions - 1) * gap
 		local scale = GetUIScale()
-		local view = ViewportSize()
+		local view = Private.ViewportSize()
 		local anchorPos, anchorSize = anchor.AbsolutePosition, anchor.AbsoluteSize
 		local px = (anchorPos.X + anchorSize.X) / scale - popupW
 		local py = (anchorPos.Y + anchorSize.Y) / scale + 5
@@ -14365,7 +14366,7 @@ function Tab:AddCardGrid(opts)
 		if self._window then popup:SetAttribute("VVindWindowId", self._window._id) end
 		Corner(popup, 10)
 		Stroke(popup, VVindUI.Theme.Border, 1, 0.9)
-		GlassLayer(popup, 10, 0.985)
+		Private.GlassLayer(popup, 10, 0.985)
  
 		local actionsHolder = Instance.new("Frame")
 		actionsHolder.Name = "Actions"
@@ -14901,7 +14902,7 @@ function Tab:AddCardGrid(opts)
 	}
 end
  
-local function ReadControlValue(api)
+function Private.ReadControlValue(api)
 	local getter = api.Kind == "Keybind" and type(api.GetState) == "function" and api.GetState or api.Get
 	return getter(api)
 end
@@ -14914,9 +14915,9 @@ function VVindUI:GetConfig()
 	for _, flag in ipairs(flags) do
 		local api = self.Flags[flag]
 		if type(api.Get) ~= "function" then return nil, flag .. ": getter is unavailable" end
-		local ok, value = pcall(ReadControlValue, api)
+		local ok, value = pcall(Private.ReadControlValue, api)
 		if not ok then return nil, flag .. ": getter failed: " .. tostring(value) end
-		local encoded, serialized = pcall(Serialize, value)
+		local encoded, serialized = pcall(Private.Serialize, value)
 		if not encoded then return nil, flag .. ": value could not be serialized: " .. tostring(serialized) end
 		if value ~= nil then
 			data[flag] = serialized
@@ -14943,7 +14944,7 @@ end
 function VVindUI:GetValue(flag)
 	local api = self.Flags[flag]
 	if not api or type(api.Get) ~= "function" then return nil, "unknown flag: " .. tostring(flag) end
-	local ok, value = pcall(ReadControlValue, api)
+	local ok, value = pcall(Private.ReadControlValue, api)
 	if not ok then return nil, tostring(value) end
 	return value
 end
@@ -14952,8 +14953,8 @@ function VVindUI:GetValues()
 	local values = {}
 	for flag, api in pairs(self.Flags) do
 		if type(api.Get) == "function" then
-			local ok, value = pcall(ReadControlValue, api)
-			if ok then values[flag] = CopyConfigValue(value) end
+			local ok, value = pcall(Private.ReadControlValue, api)
+			if ok then values[flag] = Private.CopyConfigValue(value) end
 		end
 	end
 	return values
@@ -14979,7 +14980,7 @@ function VVindUI:InitializeCallbacks()
 	for _, entry in ipairs(pending) do
 		local api = entry.Api
 		if self.Flags[entry.Flag] == api and not api._CallbacksInitialized then
-			local readOk, value = pcall(ReadControlValue, api)
+			local readOk, value = pcall(Private.ReadControlValue, api)
 			if not readOk then
 				table.insert(errors, { Flag = entry.Flag, Error = tostring(value) })
 				warn("[VindUI] Could not initialize '" .. entry.Flag .. "': " .. tostring(value))
@@ -14988,12 +14989,12 @@ function VVindUI:InitializeCallbacks()
 				local info = { Source = "initialization", Action = "initialize" }
 				local ok, err
 				if api.Kind == "Textbox" then
-					ok, err = pcall(api._InitializationCallback, CopyConfigValue(value), false, info)
+					ok, err = pcall(api._InitializationCallback, Private.CopyConfigValue(value), false, info)
 				elseif api.Kind == "AssetGrid" then
-					ok, err = pcall(api._InitializationCallback, CopyConfigValue(value), info,
+					ok, err = pcall(api._InitializationCallback, Private.CopyConfigValue(value), info,
 						api.GetOption and api:GetOption() or nil)
 				else
-					ok, err = pcall(api._InitializationCallback, CopyConfigValue(value), info)
+					ok, err = pcall(api._InitializationCallback, Private.CopyConfigValue(value), info)
 				end
 				if ok then
 					initialized += 1
@@ -15011,7 +15012,7 @@ end
 VVindUI.GetFlag = VVindUI.GetValue
 VVindUI.GetCurrentValues = VVindUI.GetValues
 
-local function ResolveConfigFlag(flag)
+function Private.ResolveConfigFlag(flag)
 	local current, visited = flag, {}
 	while VVindUI.FlagMigrations[current] do
 		if visited[current] then return nil, "cyclic flag migration" end
@@ -15021,11 +15022,11 @@ local function ResolveConfigFlag(flag)
 	return current
 end
 
-local function ConfigValuesEqual(first, second)
+function Private.ConfigValuesEqual(first, second)
 	if typeof(first) ~= typeof(second) or type(first) ~= type(second) then return false end
 	if type(first) ~= "table" then return first == second end
 	for key, value in pairs(first) do
-		if not ConfigValuesEqual(value, second[key]) then return false end
+		if not Private.ConfigValuesEqual(value, second[key]) then return false end
 	end
 	for key in pairs(second) do
 		if first[key] == nil then return false end
@@ -15033,7 +15034,7 @@ local function ConfigValuesEqual(first, second)
 	return true
 end
 
-local function PrepareConfig(input)
+function Private.PrepareConfig(input)
 	local data = input
 	if type(data) == "string" then
 		local ok, decoded = pcall(function() return HttpService:JSONDecode(data) end)
@@ -15054,7 +15055,7 @@ local function PrepareConfig(input)
 	table.sort(sourceKeys)
 	local migrated, origins, migrations = {}, {}, {}
 	for _, sourceFlag in ipairs(sourceKeys) do
-		local targetFlag, migrationErr = ResolveConfigFlag(sourceFlag)
+		local targetFlag, migrationErr = Private.ResolveConfigFlag(sourceFlag)
 		if not targetFlag then
 			table.insert(errors, sourceFlag .. ": " .. migrationErr)
 		elseif origins[targetFlag] then
@@ -15077,7 +15078,7 @@ local function PrepareConfig(input)
 		if not api or type(api.Set) ~= "function" then
 			table.insert(errors, flag .. ": unknown config flag")
 		else
-			local decodeOk, value = pcall(Deserialize, migrated[flag])
+			local decodeOk, value = pcall(Private.Deserialize, migrated[flag])
 			if not decodeOk then
 				table.insert(errors, flag .. ": value could not be decoded: " .. tostring(value))
 			else
@@ -15102,28 +15103,28 @@ local function PrepareConfig(input)
 	local changes = {}
 	for _, entry in ipairs(staged) do
 		local api = VVindUI.Flags[entry.Flag]
-		local ok, current = pcall(ReadControlValue, api)
+		local ok, current = pcall(Private.ReadControlValue, api)
 		if not ok then return false, entry.Flag .. ": getter failed: " .. tostring(current) end
-		if not ConfigValuesEqual(current, entry.Value) then
-			table.insert(changes, { Flag = entry.Flag, Before = CopyConfigValue(current), After = CopyConfigValue(entry.Value) })
+		if not Private.ConfigValuesEqual(current, entry.Value) then
+			table.insert(changes, { Flag = entry.Flag, Before = Private.CopyConfigValue(current), After = Private.CopyConfigValue(entry.Value) })
 		end
 	end
 	return true, { Staged = staged, Changes = changes, Migrations = migrations, changes = changes, migrations = migrations }
 end
 
 function VVindUI:PreviewConfig(data)
-	local ok, prepared = PrepareConfig(data)
+	local ok, prepared = Private.PrepareConfig(data)
 	if not ok then return false, prepared end
 	return true, { Changes = prepared.Changes, Migrations = prepared.Migrations, changes = prepared.Changes, migrations = prepared.Migrations }
 end
 
-local function RollbackConfigValues(applied)
+function Private.RollbackConfigValues(applied)
 	local errors = {}
 	for index = #applied, 1, -1 do
 		local prior = applied[index]
 		local priorApi = VVindUI.Flags[prior.Flag]
 		if priorApi and type(priorApi.Set) == "function" then
-			local restored, restoreErr = pcall(priorApi.Set, priorApi, CopyConfigValue(prior.Value), true)
+			local restored, restoreErr = pcall(priorApi.Set, priorApi, Private.CopyConfigValue(prior.Value), true)
 			if not restored then table.insert(errors, prior.Flag .. ": " .. tostring(restoreErr)) end
 		end
 	end
@@ -15131,7 +15132,7 @@ local function RollbackConfigValues(applied)
 end
 
 function VVindUI:SetConfig(data, silent)
-	local ok, prepared = PrepareConfig(data)
+	local ok, prepared = Private.PrepareConfig(data)
 	if not ok then return false, prepared end
 	local applied = {}
 	local previousApplying = self._ApplyingConfig
@@ -15140,19 +15141,19 @@ function VVindUI:SetConfig(data, silent)
 	self._ChangeSource = "config"
 	for _, entry in ipairs(prepared.Staged) do
 		local api = self.Flags[entry.Flag]
-		local readOk, snapshot = pcall(ReadControlValue, api)
+		local readOk, snapshot = pcall(Private.ReadControlValue, api)
 		if not readOk then
-			local rollbackErrors = RollbackConfigValues(applied)
+			local rollbackErrors = Private.RollbackConfigValues(applied)
 			self._ApplyingConfig = previousApplying
 			self._ChangeSource = previousSource
 			local message = entry.Flag .. ": getter failed: " .. tostring(snapshot)
 			if #rollbackErrors > 0 then message ..= "; rollback failed: " .. table.concat(rollbackErrors, ", ") end
 			return false, message
 		end
-		table.insert(applied, { Flag = entry.Flag, Value = CopyConfigValue(snapshot) })
-		local setOk, setErr = pcall(api.Set, api, CopyConfigValue(entry.Value), silent ~= false)
+		table.insert(applied, { Flag = entry.Flag, Value = Private.CopyConfigValue(snapshot) })
+		local setOk, setErr = pcall(api.Set, api, Private.CopyConfigValue(entry.Value), silent ~= false)
 		if not setOk then
-			local rollbackErrors = RollbackConfigValues(applied)
+			local rollbackErrors = Private.RollbackConfigValues(applied)
 			self._ApplyingConfig = previousApplying
 			self._ChangeSource = previousSource
 			local message = entry.Flag .. ": setter failed: " .. tostring(setErr)
@@ -15203,7 +15204,7 @@ end
 function VVindUI:ListUIElements()
 	local out = {}
 	for flag, api in pairs(VVindUI.Flags) do
-		local ok, value = pcall(ReadControlValue, api)
+		local ok, value = pcall(Private.ReadControlValue, api)
 		table.insert(out, {
 			Flag  = flag,
 			Kind  = api.Kind,
@@ -15263,22 +15264,22 @@ VVindUI.SetFlag = VVindUI.SetUIElementValue
 VVindUI.ConfigFolder = "Randoms"
 VVindUI.SettingsDirectory = STORAGE_FOLDER .. "/Settings/Randoms"
 
-local function EnsureDirectory(path)
-	if not (fn_isfolder and fn_makefolder) then return false end
-	local existsOk, exists = pcall(fn_isfolder, path)
+function Private.EnsureDirectory(path)
+	if not (Private.fn_isfolder and Private.fn_makefolder) then return false end
+	local existsOk, exists = pcall(Private.fn_isfolder, path)
 	if existsOk and exists then return true end
-	pcall(fn_makefolder, path)
-	local retryOk, nowExists = pcall(fn_isfolder, path)
+	pcall(Private.fn_makefolder, path)
+	local retryOk, nowExists = pcall(Private.fn_isfolder, path)
 	return retryOk and nowExists == true
 end
 
-local function EnsureSettingsDirectory()
-	return EnsureDirectory(STORAGE_FOLDER)
-		and EnsureDirectory(STORAGE_FOLDER .. "/Settings")
-		and EnsureDirectory(VVindUI.SettingsDirectory)
+function Private.EnsureSettingsDirectory()
+	return Private.EnsureDirectory(STORAGE_FOLDER)
+		and Private.EnsureDirectory(STORAGE_FOLDER .. "/Settings")
+		and Private.EnsureDirectory(VVindUI.SettingsDirectory)
 end
 
-local function SafeConfigName(name)
+function Private.SafeConfigName(name)
 	name = tostring(name or "config"):match("^%s*(.-)%s*$") or ""
 	name = name:gsub("[^%w%._%- ]", "_"):gsub("%s+", "_"):gsub("%.+$", ""):sub(1, 64)
 	if name == "" or name == "." or name == ".." then name = "config" end
@@ -15290,7 +15291,7 @@ local function SafeConfigName(name)
 	return name
 end
 
-local function SafeSettingsFolder(name)
+function Private.SafeSettingsFolder(name)
 	name = tostring(name or "Randoms"):match("^%s*(.-)%s*$") or ""
 	name = name:gsub("[^%w%._%-]", "_"):gsub("%.+$", ""):sub(1, 64)
 	if name == "" or name == "." or name == ".." then name = "Randoms" end
@@ -15302,15 +15303,15 @@ local function SafeSettingsFolder(name)
 	return name
 end
 
-local function ConfigPath(name)
+function Private.ConfigPath(name)
 	return VVindUI.SettingsDirectory .. "/" .. SafeConfigName(name) .. ".cfg"
 end
 
-local function ConfigMetadataPath(path)
+function Private.ConfigMetadataPath(path)
 	return path .. ".meta.json"
 end
 
-local function BuildConfigEnvelope(name, data, meta)
+function Private.BuildConfigEnvelope(name, data, meta)
 	meta = meta or {}
 	return {
 		Schema      = 1,
@@ -15322,7 +15323,7 @@ local function BuildConfigEnvelope(name, data, meta)
 	}
 end
  
-local function ReadConfigFile(path, fallbackName)
+function Private.ReadConfigFile(path, fallbackName)
 	if not (fn_isfile and fn_readfile) then return nil, "readfile unavailable" end
 	local existsOk, exists = pcall(fn_isfile, path)
 	if not existsOk or not exists then return nil, "config does not exist" end
@@ -15332,9 +15333,9 @@ local function ReadConfigFile(path, fallbackName)
 	if not decodeOk then return nil, "failed to decode config" end
 	if type(decoded) ~= "table" then return nil, "malformed config" end
 	local envelope = type(decoded.Data) == "table" and decoded.Schema ~= nil
-		and decoded or BuildConfigEnvelope(fallbackName, decoded, {})
+		and decoded or Private.BuildConfigEnvelope(fallbackName, decoded, {})
 	if not envelope.Name then envelope.Name = fallbackName end
-	local metadataPath = ConfigMetadataPath(path)
+	local metadataPath = Private.ConfigMetadataPath(path)
 	local metaExistsOk, metaExists = pcall(fn_isfile, metadataPath)
 	if metaExistsOk and metaExists then
 		local metaOk, metaRaw = pcall(fn_readfile, metadataPath)
@@ -15354,11 +15355,11 @@ end
 function VVindUI:SaveConfig(name, opts)
 	if not fn_writefile then return false, "writefile unavailable" end
 	opts = opts or {}
-	name = SafeConfigName(name)
-	if not EnsureSettingsDirectory() then return false, "cannot create configuration folder" end
+	name = Private.SafeConfigName(name)
+	if not Private.EnsureSettingsDirectory() then return false, "cannot create configuration folder" end
 	local data, configErr = self:GetConfig()
 	if not data then return false, configErr end
-	local path = ConfigPath(name)
+	local path = Private.ConfigPath(name)
 	local saved, encoded = pcall(function() return HttpService:JSONEncode(data) end)
 	if not saved then return false, tostring(encoded) end
 	local writeOk, writeErr = pcall(fn_writefile, path, encoded)
@@ -15371,26 +15372,26 @@ function VVindUI:SaveConfig(name, opts)
 	}
 	local metadataOk, metadataJson = pcall(function() return HttpService:JSONEncode(metadata) end)
 	if not metadataOk then return false, "config saved but metadata could not be encoded: " .. tostring(metadataJson) end
-	local metaWriteOk, metaWriteErr = pcall(fn_writefile, ConfigMetadataPath(path), metadataJson)
+	local metaWriteOk, metaWriteErr = pcall(fn_writefile, Private.ConfigMetadataPath(path), metadataJson)
 	if not metaWriteOk or metaWriteErr == false then return false, "config saved but metadata could not be written: " .. tostring(metaWriteErr or "writefile returned false") end
 	return true
 end
  
-local function ReadNamedConfig(name)
-	name = SafeConfigName(name)
-	local primary = ReadConfigFile(ConfigPath(name), name)
-	if primary then return primary, ConfigPath(name) end
+function Private.ReadNamedConfig(name)
+	name = Private.SafeConfigName(name)
+	local primary = Private.ReadConfigFile(Private.ConfigPath(name), name)
+	if primary then return primary, Private.ConfigPath(name) end
 	return nil, "config does not exist"
 end
 
 function VVindUI:LoadConfig(name, silent)
-	local envelope, err = ReadNamedConfig(name or "config")
+	local envelope, err = Private.ReadNamedConfig(name or "config")
 	if not envelope then return false, err end
 	return self:SetConfig(envelope.Data, silent)
 end
  
 function VVindUI:GetConfigMeta(name)
-	local envelope, err = ReadNamedConfig(name)
+	local envelope, err = Private.ReadNamedConfig(name)
 	if not envelope then return nil, err end
 	return {
 		Name        = envelope.Name or name,
@@ -15401,26 +15402,26 @@ function VVindUI:GetConfigMeta(name)
 end
  
 function VVindUI:GetSavedConfig(name)
-	local envelope, err = ReadNamedConfig(name)
+	local envelope, err = Private.ReadNamedConfig(name)
 	if not envelope then return nil, err end
 	return envelope, nil
 end
  
 function VVindUI:ListConfigs()
-	if not fn_listfiles then return {}, "listfiles unavailable" end
-	EnsureSettingsDirectory()
+	if not Private.fn_listfiles then return {}, "listfiles unavailable" end
+	Private.EnsureSettingsDirectory()
 	local directories = { VVindUI.SettingsDirectory }
 	local out, seen = {}, {}
 	for _, directory in ipairs(directories) do
-		local ok, files = pcall(fn_listfiles, directory)
+		local ok, files = pcall(Private.fn_listfiles, directory)
 		if ok and type(files) == "table" then
 			for _, path in ipairs(files) do
 				if type(path) == "string" then
 					local normalized = path:gsub("\\", "/")
 					local fileName = normalized:match("([^/]+)%.cfg$") or normalized:match("([^/]+)%.json$")
 					if fileName and not fileName:match("%.meta$") and fileName ~= "cloud_identity" and fileName ~= "default_config" then
-						local envelope = ReadConfigFile(path, fileName)
-						local name = envelope and SafeConfigName(envelope.Name or fileName)
+						local envelope = Private.ReadConfigFile(path, fileName)
+						local name = envelope and Private.SafeConfigName(envelope.Name or fileName)
 						if envelope and not seen[name] then
 							seen[name] = true
 							table.insert(out, {
@@ -15443,7 +15444,7 @@ end
 function VVindUI:DeleteConfig(name)
 	if not (fn_isfile and fn_delfile) then return false, "delfile unavailable" end
 	local removed, errors = false, {}
-	local paths = { ConfigPath(name), ConfigMetadataPath(ConfigPath(name)) }
+	local paths = { Private.ConfigPath(name), Private.ConfigMetadataPath(Private.ConfigPath(name)) }
 	for _, path in ipairs(paths) do
 		local existsOk, exists = pcall(fn_isfile, path)
 		if existsOk and exists then
@@ -15457,11 +15458,11 @@ function VVindUI:DeleteConfig(name)
 end
  
 function VVindUI:RenameConfig(oldName, newName)
-	local envelope, oldPath = ReadNamedConfig(oldName)
+	local envelope, oldPath = Private.ReadNamedConfig(oldName)
 	if not envelope then return false, oldPath end
-	local newSafeName = SafeConfigName(newName)
-	if not (fn_writefile and EnsureSettingsDirectory()) then return false, "cannot create configuration folder" end
-	local newPath = ConfigPath(newSafeName)
+	local newSafeName = Private.SafeConfigName(newName)
+	if not (fn_writefile and Private.EnsureSettingsDirectory()) then return false, "cannot create configuration folder" end
+	local newPath = Private.ConfigPath(newSafeName)
 	local dataOk, dataJson = pcall(function() return HttpService:JSONEncode(envelope.Data) end)
 	if not dataOk then return false, tostring(dataJson) end
 	local writeOk, writeErr = pcall(fn_writefile, newPath, dataJson)
@@ -15474,10 +15475,10 @@ function VVindUI:RenameConfig(oldName, newName)
 	}
 	local metaOk, metaJson = pcall(function() return HttpService:JSONEncode(metadata) end)
 	if not metaOk then return false, "config renamed but metadata could not be encoded: " .. tostring(metaJson) end
-	local metaWriteOk, metaWriteErr = pcall(fn_writefile, ConfigMetadataPath(newPath), metaJson)
+	local metaWriteOk, metaWriteErr = pcall(fn_writefile, Private.ConfigMetadataPath(newPath), metaJson)
 	if not metaWriteOk or metaWriteErr == false then return false, "config renamed but metadata could not be written: " .. tostring(metaWriteErr or "writefile returned false") end
-	if oldPath ~= ConfigPath(newSafeName) then
-		for _, path in ipairs({ oldPath, ConfigMetadataPath(oldPath) }) do
+	if oldPath ~= Private.ConfigPath(newSafeName) then
+		for _, path in ipairs({ oldPath, Private.ConfigMetadataPath(oldPath) }) do
 			if fn_isfile and fn_delfile then
 				local existsOk, exists = pcall(fn_isfile, path)
 				if existsOk and exists then pcall(fn_delfile, path) end
@@ -15500,7 +15501,7 @@ end
 
 function VVindUI:SetConfigFolder(name)
 	local previousDirectory = self.SettingsDirectory
-	self.ConfigFolder = SafeSettingsFolder(name)
+	self.ConfigFolder = Private.SafeSettingsFolder(name)
 	self.SettingsDirectory = STORAGE_FOLDER .. "/Settings/" .. self.ConfigFolder
 	self.settings_folder = self.ConfigFolder
 	self.settings_directory = self.SettingsDirectory
@@ -15511,12 +15512,12 @@ function VVindUI:SetConfigFolder(name)
 		self._AutoConfigPending = nil
 		self._AutoConfigApplied = nil
 	end
-	self.SettingsDirectoryAvailable = EnsureSettingsDirectory()
+	self.SettingsDirectoryAvailable = Private.EnsureSettingsDirectory()
 	self.settings_directory_available = self.SettingsDirectoryAvailable
 	return self.ConfigFolder
 end
 
-local function AutoConfigPath()
+function Private.AutoConfigPath()
 	return VVindUI.SettingsDirectory .. "/default_config.json"
 end
 
@@ -15547,7 +15548,7 @@ function VVindUI:_QueueAutoConfigLoaded()
 end
 
 function VVindUI:LoadAutoConfig()
-	local path = AutoConfigPath()
+	local path = Private.AutoConfigPath()
 	if self._AutoConfigCheckedPath == path then return false end
 	self._AutoConfigCheckedPath = path
 	if not (fn_isfile and fn_readfile) then return false end
@@ -15574,7 +15575,7 @@ function VVindUI:ApplyAutoConfigFlag(flag)
 	if type(pending) ~= "table" or not api then return false end
 	local sources = {}
 	for sourceFlag, value in pairs(pending) do
-		local targetFlag = ResolveConfigFlag(sourceFlag)
+		local targetFlag = Private.ResolveConfigFlag(sourceFlag)
 		if value ~= nil and targetFlag == flag then table.insert(sources, sourceFlag) end
 	end
 	table.sort(sources)
@@ -15584,7 +15585,7 @@ function VVindUI:ApplyAutoConfigFlag(flag)
 		return false
 	end
 	local sourceFlag = sources[1]
-	local decodeOk, value = pcall(Deserialize, pending[sourceFlag])
+	local decodeOk, value = pcall(Private.Deserialize, pending[sourceFlag])
 	if not decodeOk then
 		warn("[VindUI] saved setting for '" .. flag .. "' could not be decoded: " .. tostring(value))
 		return false
@@ -15599,7 +15600,7 @@ function VVindUI:ApplyAutoConfigFlag(flag)
 		warn("[VindUI] saved setting for '" .. flag .. "' was skipped: " .. tostring(reason or normalized or valid))
 		return false
 	end
-	local getOk, snapshot = pcall(ReadControlValue, api)
+	local getOk, snapshot = pcall(Private.ReadControlValue, api)
 	if not getOk then
 		warn("[VindUI] saved setting for '" .. flag .. "' could not be applied: getter failed: " .. tostring(snapshot))
 		return false
@@ -15609,7 +15610,7 @@ function VVindUI:ApplyAutoConfigFlag(flag)
 	self._ApplyingConfig = true
 	self._ApplyingAutoConfig = true
 	local setOk, setErr = pcall(api.Set, api, normalized, true)
-	if not setOk then pcall(api.Set, api, CopyConfigValue(snapshot), true) end
+	if not setOk then pcall(api.Set, api, Private.CopyConfigValue(snapshot), true) end
 	self._ApplyingAutoConfig = previousAutoApplying
 	self._ApplyingConfig = previousApplying
 	if not setOk then
@@ -15623,17 +15624,17 @@ function VVindUI:ApplyAutoConfigFlag(flag)
 end
 
 function VVindUI:SaveAutoConfig()
-	if not EnsureSettingsDirectory() then return false, "cannot create settings folder" end
+	if not Private.EnsureSettingsDirectory() then return false, "cannot create settings folder" end
 	local data, err = self:GetConfig()
 	if not data then return false, err end
 	for sourceFlag, value in pairs(self._AutoConfigPending or {}) do
-		local targetFlag = ResolveConfigFlag(sourceFlag)
+		local targetFlag = Private.ResolveConfigFlag(sourceFlag)
 		if not targetFlag or not self.Flags[targetFlag] then data[sourceFlag] = value end
 	end
 	local ok, encoded = pcall(function() return HttpService:JSONEncode(data) end)
 	if not ok then return false, tostring(encoded) end
 	if not fn_writefile then return false, "writefile unavailable" end
-	local writeOk, writeErr = pcall(fn_writefile, AutoConfigPath(), encoded)
+	local writeOk, writeErr = pcall(fn_writefile, Private.AutoConfigPath(), encoded)
 	if not writeOk or writeErr == false then return false, tostring(writeErr or "writefile returned false") end
 	self._AutoConfigPending = data
 	return true
@@ -15669,13 +15670,13 @@ function VVindUI:ResetConfiguration(opts)
 	local clearNamed = opts.ClearSavedConfigs == true
 	local runCallbacks = opts.RunCallbacks ~= false
 	if clearAuto and not fn_delfile and fn_isfile then
-		local ok, exists = pcall(fn_isfile, AutoConfigPath())
+		local ok, exists = pcall(fn_isfile, Private.AutoConfigPath())
 		if ok and exists then return false, "delfile is unavailable" end
 	end
 	local ordered, snapshots = {}, {}
 	for flag, api in pairs(self.Flags) do
 		if api._HasInitialValue then
-			local ok, oldValue = pcall(ReadControlValue, api)
+			local ok, oldValue = pcall(Private.ReadControlValue, api)
 			if not ok then return false, flag .. ": could not read value: " .. tostring(oldValue) end
 			table.insert(ordered, { Flag = flag, Api = api })
 			snapshots[flag] = CopyInitialFlagValue(oldValue)
@@ -15710,7 +15711,7 @@ function VVindUI:ResetConfiguration(opts)
 	self._AutoConfigLoadGeneration = (self._AutoConfigLoadGeneration or 0) + 1
 	self._AutoConfigPending = {}
 	self._AutoConfigApplied = {}
-	self._AutoConfigCheckedPath = AutoConfigPath()
+	self._AutoConfigCheckedPath = Private.AutoConfigPath()
 	if runCallbacks then
 		for _, entry in ipairs(ordered) do
 			local cb = entry.Api._InitializationCallback
@@ -15730,7 +15731,7 @@ function VVindUI:ResetConfiguration(opts)
 		end
 	end
 	if clearAuto and fn_isfile and fn_delfile then
-		local path = AutoConfigPath()
+		local path = Private.AutoConfigPath()
 		local ok, exists = pcall(fn_isfile, path)
 		if ok and exists then
 			local deleted, err = pcall(fn_delfile, path)
@@ -15765,12 +15766,12 @@ VVindUI.register_flag_migration = VVindUI.RegisterFlagMigration
 VVindUI.load_auto_config = VVindUI.LoadAutoConfig
 VVindUI.save_auto_config = VVindUI.SaveAutoConfig
  
-local CLOUD_TOKENS_PATH = STORAGE_FOLDER .. "/cloud_tokens.json"
-local OLD_CLOUD_IDENTITY_PATH = STORAGE_FOLDER .. "/cloud_identity.json"
+Private.CLOUD_TOKENS_PATH = STORAGE_FOLDER .. "/cloud_tokens.json"
+Private.OLD_CLOUD_IDENTITY_PATH = STORAGE_FOLDER .. "/cloud_identity.json"
 
-local function LoadCloudTokens()
+function Private.LoadCloudTokens()
 	if fn_isfile and fn_readfile then
-		for _, path in ipairs({ CLOUD_TOKENS_PATH, OLD_CLOUD_IDENTITY_PATH }) do
+		for _, path in ipairs({ Private.CLOUD_TOKENS_PATH, Private.OLD_CLOUD_IDENTITY_PATH }) do
 			local existsOk, exists = pcall(fn_isfile, path)
 			if existsOk and exists then
 				local ok, raw = pcall(fn_readfile, path)
@@ -15786,39 +15787,39 @@ local function LoadCloudTokens()
 	return {}
 end
 
-local function SaveCloudTokens(tokens)
+function Private.SaveCloudTokens(tokens)
 	if not fn_writefile then
 		if fn_isfile and fn_delfile then
-			local existsOk, exists = pcall(fn_isfile, OLD_CLOUD_IDENTITY_PATH)
-			if existsOk and exists then pcall(fn_delfile, OLD_CLOUD_IDENTITY_PATH) end
+			local existsOk, exists = pcall(fn_isfile, Private.OLD_CLOUD_IDENTITY_PATH)
+			if existsOk and exists then pcall(fn_delfile, Private.OLD_CLOUD_IDENTITY_PATH) end
 		end
 		return false
 	end
-	EnsureAssetsFolder()
+	Private.EnsureAssetsFolder()
 	local encodeOk, encoded = pcall(function() return HttpService:JSONEncode({ Tokens = tokens }) end)
 	if not encodeOk then return false end
-		local writeOk, writeResult = pcall(fn_writefile, CLOUD_TOKENS_PATH, encoded)
+		local writeOk, writeResult = pcall(fn_writefile, Private.CLOUD_TOKENS_PATH, encoded)
 		if not writeOk or writeResult == false then return false end
 
 	if fn_isfile then
-		local existsOk, exists = pcall(fn_isfile, OLD_CLOUD_IDENTITY_PATH)
+		local existsOk, exists = pcall(fn_isfile, Private.OLD_CLOUD_IDENTITY_PATH)
 		if existsOk and exists then
-			if fn_delfile then pcall(fn_delfile, OLD_CLOUD_IDENTITY_PATH) end
-			local checkOk, stillExists = pcall(fn_isfile, OLD_CLOUD_IDENTITY_PATH)
-			if checkOk and stillExists then pcall(fn_writefile, OLD_CLOUD_IDENTITY_PATH, encoded) end
+			if fn_delfile then pcall(fn_delfile, Private.OLD_CLOUD_IDENTITY_PATH) end
+			local checkOk, stillExists = pcall(fn_isfile, Private.OLD_CLOUD_IDENTITY_PATH)
+			if checkOk and stillExists then pcall(fn_writefile, Private.OLD_CLOUD_IDENTITY_PATH, encoded) end
 		end
 	end
 	return true
 end
  
-local CLOUD_PUBLISH_COOLDOWN = 15
-local LastCloudPublishAt = 0
+Private.CLOUD_PUBLISH_COOLDOWN = 15
+Private.LastCloudPublishAt = 0
  
 function VVindUI:CloudService(opts)
 	opts = opts or {}
 	local baseUrl = opts.BaseUrl
-	local cloudTokens = LoadCloudTokens()
-	SaveCloudTokens(cloudTokens)
+	local cloudTokens = Private.LoadCloudTokens()
+	Private.SaveCloudTokens(cloudTokens)
 	local httpRequest = (syn and syn.request) or http_request or request
  
 	local function apiRequest(method, path, body, extraHeaders)
@@ -15890,10 +15891,10 @@ function VVindUI:CloudService(opts)
 	function api:Publish(meta, data)
 		meta = meta or {}
 		local now = os.clock()
-		if now - LastCloudPublishAt < CLOUD_PUBLISH_COOLDOWN then
+		if now - Private.LastCloudPublishAt < Private.CLOUD_PUBLISH_COOLDOWN then
 			return nil, string.format(
 				"Please wait %ds before publishing again.",
-				math.ceil(CLOUD_PUBLISH_COOLDOWN - (now - LastCloudPublishAt))
+				math.ceil(Private.CLOUD_PUBLISH_COOLDOWN - (now - Private.LastCloudPublishAt))
 			)
 		end
  
@@ -15913,7 +15914,7 @@ function VVindUI:CloudService(opts)
 			if #cleanTags >= 8 then break end
 		end
  
-		LastCloudPublishAt = now
+		Private.LastCloudPublishAt = now
  
 		local decoded, err = apiRequest("POST", "/configs", {
 			Name = cleanName,
@@ -15925,7 +15926,7 @@ function VVindUI:CloudService(opts)
  
 		if decoded.Id and decoded.OwnerToken then
 			cloudTokens[decoded.Id] = decoded.OwnerToken
-			SaveCloudTokens(cloudTokens)
+			Private.SaveCloudTokens(cloudTokens)
 		end
 		return decoded
 	end
@@ -15940,7 +15941,7 @@ function VVindUI:CloudService(opts)
 		})
 		if not decoded then return false, err end
 		cloudTokens[id] = nil
-		SaveCloudTokens(cloudTokens)
+		Private.SaveCloudTokens(cloudTokens)
 		return true
 	end
  
@@ -16001,7 +16002,7 @@ function VVindUI:CreateAIAssistant(opts)
  
 	local persistPath = nil
 	if opts.Persist then
-		local persistName = SafeConfigName(tostring(opts.Persist)) .. ".chat.json"
+		local persistName = Private.SafeConfigName(tostring(opts.Persist)) .. ".chat.json"
 		persistPath = ASSETS_FOLDER .. "/" .. persistName
 	end
  
@@ -16022,7 +16023,7 @@ function VVindUI:CreateAIAssistant(opts)
  
 	local function saveHistory()
 		if not (persistPath and fn_writefile) then return end
-		EnsureAssetsFolder()
+		Private.EnsureAssetsFolder()
 		pcall(fn_writefile, persistPath, HttpService:JSONEncode(conversation))
 	end
  
@@ -16692,32 +16693,32 @@ function FloatingInternals.DestroyAllWindowJanitors()
 	local windows = table.clone(VVindUI._Windows)
 	for _, win in ipairs(windows) do
 		win._destroyed = true
-		FireWindowDestroyCallbacks(win)
+		Private.FireWindowDestroyCallbacks(win)
 		if win._janitor then win._janitor:Destroy() end
 	end
 	table.clear(VVindUI._Windows)
 end
  
 VVindUI._Root.Destroying:Connect(function()
-	DestroyActiveScopes()
-	AcrylicShuttingDown = true
+	Private.DestroyActiveScopes()
+	Private.AcrylicShuttingDown = true
 	FloatingInternals.DestroyAllWindowJanitors()
-	DestroyAllAcrylicControllers()
+	Private.DestroyAllAcrylicControllers()
 	LibJanitor:Destroy()
 end)
  
 function VVindUI:Unload()
-	DestroyActiveScopes()
-	CloseAnyOpenPopup()
-	AcrylicShuttingDown = true
+	Private.DestroyActiveScopes()
+	Private.CloseAnyOpenPopup()
+	Private.AcrylicShuttingDown = true
 	FloatingInternals.DestroyAllWindowJanitors()
-	DestroyAllAcrylicControllers()
+	Private.DestroyAllAcrylicControllers()
 	LibJanitor:Destroy()
 	if VVindUI._Root then VVindUI._Root:Destroy() end
 end
  
 do
-	local globalTable = GetGlobalTable()
+	local globalTable = Private.GetGlobalTable()
 	globalTable.__VVindUI_Unload = function()
 		pcall(function() VVindUI:Unload() end)
 	end
