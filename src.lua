@@ -16275,7 +16275,8 @@ function VVindUI:_RefreshFloatingBindings()
 end
 
 -- CreateBubbleToggle({ Flag = "MyToggle", Icon = "shield", Color = Color3.fromRGB(...),
---    Position = UDim2.fromOffset(30, 230), Size = 50, Draggable = true })
+--    Position = UDim2.fromOffset(30, 230), Size = 50, Draggable = true,
+--    AllowOffscreen = false }) -- default true for backward compatibility
 function VVindUI:CreateBubbleToggle(opts)
 	opts = opts or {}
 	local scope = FloatingInternals.Scope(opts)
@@ -16400,7 +16401,7 @@ function VVindUI:CreateBubbleToggle(opts)
 		FloatingInternals.Registry[widget] = nil
 		if sourceConnection then sourceConnection:Disconnect(); sourceConnection = nil end
 	end)
-	FloatingInternals.RegisterDrag(bubble, bubble, function() widget:Set(not state) end, opts.Draggable, scope, true)
+	FloatingInternals.RegisterDrag(bubble, bubble, function() widget:Set(not state) end, opts.Draggable, scope, opts.AllowOffscreen ~= false)
 	FloatingInternals.Registry[widget] = true
 	scope:Add(VVindUI:OnConfigLoaded(function() widget:Refresh() end))
 	widget:Refresh()
