@@ -564,6 +564,10 @@ function Private.CreateWindowAcrylic(guiObject)
  
 	function controller:Update()
 		if self.Destroyed then return end
+		if not self.Part.Parent or not self.Mesh.Parent then
+			self:Destroy()
+			return
+		end
 		local camera = workspace.CurrentCamera
 		local gui = self.Gui
 		if not camera or not gui or not gui.Parent then
@@ -572,7 +576,13 @@ function Private.CreateWindowAcrylic(guiObject)
 		end
  
 		if self.Folder.Parent ~= camera then
-			self.Folder.Parent = camera
+			local parented = pcall(function()
+				self.Folder.Parent = camera
+			end)
+			if not parented then
+				self:Destroy()
+				return
+			end
 		end
  
 		local size = gui.AbsoluteSize
@@ -622,6 +632,10 @@ function Private.CreateWindowAcrylic(guiObject)
 		Private.RefreshAcrylicEffect()
 	end
  
+	table.insert(controller.Connections, folder.Destroying:Connect(function()
+		controller:Destroy()
+	end))
+
 	for _, property in ipairs({ "AbsolutePosition", "AbsoluteSize", "Visible" }) do
 		table.insert(controller.Connections,
 			guiObject:GetPropertyChangedSignal(property):Connect(function()
